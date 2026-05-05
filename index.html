@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCS — Monitor Control System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════ */
+:root{
+  --bg:        #07090e;
+  --surface:   #0c1018;
+  --panel:     #101520;
+  --elevated:  #151d2a;
+  --border:    rgba(255,255,255,.055);
+  --border2:   rgba(255,255,255,.10);
+  --border3:   rgba(255,255,255,.16);
+
+  --green:     #00d97e;
+  --green-dim: rgba(0,217,126,.12);
+  --green-glow:rgba(0,217,126,.25);
+  --blue:      #3d9eff;
+  --blue-dim:  rgba(61,158,255,.12);
+  --amber:     #f5a623;
+  --amber-dim: rgba(245,166,35,.12);
+  --red:       #ff4f4f;
+  --red-dim:   rgba(255,79,79,.12);
+  --purple:    #a78bfa;
+  --purple-dim:rgba(167,139,250,.12);
+
+  --text:      #dde4f0;
+  --text2:     #5a6a85;
+  --text3:     #2d3a4e;
+
+  --f-head: 'Syne',sans-serif;
+  --f-mono: 'Space Mono',monospace;
+  --f-body: 'Inter',sans-serif;
+  --r:  7px;
+  --rl: 12px;
+
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:13px;line-height:1.55;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
+/* noise overlay */
+body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none;z-index:9997}
+
+/* ═══════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════ */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--elevated);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+/* ═══════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════ */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(14px)}
+  to  {opacity:1;transform:translateY(0)}
+}
+@keyframes fadeIn{
+  from{opacity:0}to{opacity:1}
+}
+@keyframes scaleIn{
+  from{opacity:0;transform:scale(.94)}
+  to  {opacity:1;transform:scale(1)}
+}
+@keyframes slideRight{
+  from{opacity:0;transform:translateX(-12px)}
+  to  {opacity:1;transform:translateX(0)}
+}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 0 var(--green-glow)}
+  50%    {box-shadow:0 0 0 6px transparent}
+}
+@keyframes pulseAmber{
+  0%,100%{box-shadow:0 0 0 0 rgba(245,166,35,.4)}
+  50%    {box-shadow:0 0 0 6px transparent}
+}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes shimmer{
+  0%  {background-position:-400px 0}
+  100%{background-position: 400px 0}
+}
+@keyframes scanline{
+  0%  {top:-8px}
+  100%{top:100%}
+}
+@keyframes blink{
+  0%,100%{opacity:1}50%{opacity:.3}
+}
+@keyframes wifiRing{
+  0%  {transform:scale(.5);opacity:.8}
+  100%{transform:scale(1.6);opacity:0}
+}
+
+.anim-fade-up  {animation:fadeUp  .45s var(--ease-out) both}
+.anim-scale-in {animation:scaleIn .35s var(--ease-spring) both}
+.anim-slide-r  {animation:slideRight .3s var(--ease-out) both}
+
+/* ═══════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════ */
+#login-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+}
+
+.login-bg-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,217,126,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,217,126,.025) 1px,transparent 1px);
+  background-size:48px 48px;
+  animation:fadeIn 1.2s ease;
+}
+
+.login-glow{
+  position:absolute;
+  width:600px;height:600px;
+  background:radial-gradient(circle,rgba(0,217,126,.055) 0%,transparent 65%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+
+/* lang switcher on login (top-right) */
+.login-lang-bar{
+  position:absolute;top:1.5rem;right:1.5rem;
+  display:flex;gap:6px;z-index:10;
+}
+
+.lang-chip{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--r);
+  color:var(--text2);
+  font-family:var(--f-mono);
+  font-size:11px;
+  padding:5px 13px;
+  cursor:pointer;
+  transition:all .2s var(--ease-out);
+  letter-spacing:.06em;
+}
+.lang-chip:hover{color:var(--text);border-color:var(--border3)}
+.lang-chip.active{
+  background:var(--green-dim);
+  border-color:rgba(0,217,126,.3);
+  color:var(--green);
+}
+
+.login-card{
+  position:relative;z-index:1;width:400px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--rl);
+  padding:2.25rem 2rem 2rem;
+  animation:fadeUp .5s var(--ease-out);
+}
+
+.login-header{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:1.75rem;
+  padding-bottom:1.25rem;
+  border-bottom:1px solid var(--border);
+}
+
+.brand-mark{
+  width:38px;height:38px;
+  background:var(--green-dim);
+  border:1px solid rgba(0,217,126,.2);
+  border-radius:var(--r);
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:3px;padding:9px;
+  flex-shrink:0;
+}
+.brand-mark span{
+  border-radius:2px;background:var(--green);
+  display:block;
+}
+.brand-mark span:nth-child(2),.brand-mark span:nth-child(3){opacity:.3}
+
+.brand-name{font-family:var(--f-head);font-size:16px;font-weight:700;color:var(--text)}
+.brand-ver{font-family:var(--f-mono);font-size:10px;color:var(--green);letter-spacing:.08em;margin-top:2px}
+
+.field{margin-bottom:1rem}
+.field-lbl{
+  display:block;font-size:11px;font-weight:500;
+  color:var(--text2);letter-spacing:.07em;text-transform:uppercase;
+  margin-bottom:6px;
+}
+.field-input{
+  width:100%;background:var(--panel);
+  border:1px solid var(--border2);
+  border-radius:var(--r);
+  color:var(--text);font-family:var(--f-mono);font-size:13px;
+  padding:10px 14px;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.field-input:focus{
+  border-color:rgba(0,217,126,.4);
+  box-shadow:0 0 0 3px rgba(0,217,126,.07);
+}
+
+.mon-config-row{
+  display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;margin:1rem 0 0;
+}
+.mon-config-row .field-input{
+  flex:1 1 180px;
+  min-width:140px;
+}
+
+.mon-add-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--rl);padding:1rem 1.1rem;
+  margin-bottom:1.1rem;animation:fadeUp .3s var(--ease-out);
+  box-shadow:0 2px 8px rgba(0,217,126,.05);
+}
+.mon-add-head{
+  font-size:10px;font-weight:600;color:var(--green);
+  letter-spacing:.09em;text-transform:uppercase;margin-bottom:0.75rem;
+  font-family:var(--f-mono);
+}
+.mon-add-fields{
+  display:grid;grid-template-columns:1fr 1fr auto;gap:0.6rem;
+  align-items:flex-end;
+}
+.mon-add-fields .field-input{
+  margin:0;padding:8px 12px;font-size:12px;height:36px;
+}
+.mon-add-fields .btn{
+  height:36px;padding:0 1.2rem;font-weight:600;
+}
+
+.mon-stats-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem;margin-bottom:1rem;
+}
+.mon-stat-mini{
+  background:var(--elevated);border:1px solid var(--border);
+  border-radius:var(--r);padding:0.6rem 0.8rem;text-align:center;
+  font-size:11px;font-family:var(--f-mono);transition:all .2s;
+}
+.mon-stat-mini:hover{border-color:var(--border2);background:var(--panel)}
+.mon-stat-mini-val{
+  font-size:20px;font-weight:700;font-family:var(--f-head);
+  margin-bottom:2px;color:var(--green);
+}
+.mon-stat-mini-lbl{
+  font-size:9px;color:var(--text2);letter-spacing:.03em;
+}
+
+.login-btn{
+  width:100%;margin-top:.25rem;
+  background:var(--green);color:#000;
+  border:none;border-radius:var(--r);
+  font-family:var(--f-head);font-size:13px;font-weight:700;
+  letter-spacing:.1em;padding:13px;
+  cursor:pointer;text-transform:uppercase;
+  transition:transform .15s var(--ease-spring),opacity .2s,box-shadow .2s;
+}
+.login-btn:hover{opacity:.88;box-shadow:0 4px 20px rgba(0,217,126,.25)}
+.login-btn:active{transform:scale(.98)}
+
+.login-msg{
+  margin-top:10px;font-size:12px;border-radius:var(--r);
+  padding:8px 12px;display:none;
+}
+.login-err{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,79,79,.2)}
+.login-info{background:var(--blue-dim);color:var(--blue);border:1px solid rgba(61,158,255,.2)}
+
+/* ═══════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════ */
+#app{display:none;min-height:100vh}
+
+/* TOPBAR */
+.topbar{
+  position:fixed;top:0;left:230px;right:0;height:54px;
+  background:rgba(7,9,14,.85);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.5rem;z-index:150;
+}
+
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar-page{font-family:var(--f-head);font-size:14px;font-weight:700;letter-spacing:.02em}
+.topbar-breadcrumb{font-size:11px;color:var(--text2);font-family:var(--f-mono)}
+
+.topbar-right{display:flex;align-items:center;gap:10px}
+
+/* lang switcher in topbar */
+.topbar-lang{display:flex;gap:4px}
+.tlang{
+  background:transparent;border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text2);
+  font-family:var(--f-mono);font-size:10px;
+  padding:4px 10px;cursor:pointer;
+  transition:all .2s var(--ease-out);
+  letter-spacing:.06em;
+}
+.tlang:hover{color:var(--text);border-color:var(--border3)}
+.tlang.active{background:var(--green-dim);border-color:rgba(0,217,126,.3);color:var(--green)}
+
+.theme-toggle{
+  width:32px;height:32px;
+  background:transparent;border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;font-size:14px;
+}
+.theme-toggle:hover{background:var(--panel);color:var(--text);border-color:var(--border3)}
+
+.ws-badge{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:var(--r);
+  font-family:var(--f-mono);font-size:10px;
+  border:1px solid;transition:all .3s;
+}
+.ws-badge.on{background:var(--green-dim);border-color:rgba(0,217,126,.2);color:var(--green)}
+.ws-badge.off{background:var(--red-dim);border-color:rgba(255,79,79,.2);color:var(--red)}
+.ws-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ws-badge.on  .ws-dot{background:var(--green);animation:pulse 2s infinite}
+.ws-badge.off .ws-dot{background:var(--red)}
+
+/* SIDEBAR */
+.sidebar{
+  position:fixed;left:0;top:0;bottom:0;width:230px;
+  background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:200;
+}
+
+.sb-logo{
+  padding:1.1rem 1rem;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;
+}
+
+.sb-mark{
+  width:30px;height:30px;
+  background:var(--green-dim);border:1px solid rgba(0,217,126,.18);
+  border-radius:var(--r);
+  display:grid;grid-template-columns:1fr 1fr;gap:2.5px;padding:7px;
+  flex-shrink:0;
+}
+.sb-mark span{border-radius:1.5px;background:var(--green);display:block}
+.sb-mark span:nth-child(2),.sb-mark span:nth-child(3){opacity:.28}
+
+.sb-brand{font-family:var(--f-head);font-size:13px;font-weight:700}
+.sb-sub{font-family:var(--f-mono);font-size:9px;color:var(--text2);letter-spacing:.06em;margin-top:1px}
+
+.sb-profile{
+  margin:.75rem .75rem .4rem;
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--r);padding:.65rem .8rem;
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;
+}
+.sb-avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg,#00d97e,#00a85e);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--f-head);font-size:11px;font-weight:700;color:#000;flex-shrink:0;
+}
+.sb-name{font-size:13px;font-weight:500}
+.sb-role{font-family:var(--f-mono);font-size:10px;color:var(--green);letter-spacing:.04em;margin-top:1px}
+
+.sb-nav{flex:1;padding:.4rem .6rem;overflow-y:auto}
+
+.nav-sec{
+  font-size:9px;font-weight:600;letter-spacing:.14em;
+  color:var(--text3);text-transform:uppercase;
+  padding:.6rem .5rem .25rem;
+}
+
+.nav-item{
+  display:flex;align-items:center;gap:9px;
+  padding:.55rem .65rem;border-radius:var(--r);
+  color:var(--text2);cursor:pointer;font-size:12.5px;
+  transition:all .2s var(--ease-out);
+  margin-bottom:1px;user-select:none;position:relative;
+}
+.nav-item:hover{background:var(--panel);color:var(--text)}
+.nav-item.active{background:var(--green-dim);color:var(--green)}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:20%;bottom:20%;
+  width:2px;border-radius:1px;background:var(--green);
+}
+
+.nav-ico{
+  width:16px;height:16px;flex-shrink:0;opacity:.7;
+}
+.nav-item.active .nav-ico{opacity:1}
+
+.nav-badge{
+  margin-left:auto;background:var(--red-dim);
+  color:var(--red);border:1px solid rgba(255,79,79,.2);
+  border-radius:20px;font-size:10px;padding:1px 7px;
+  font-family:var(--f-mono);
+}
+
+/* clock */
+.sb-clock{
+  margin:.4rem .75rem;
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--r);padding:.65rem .8rem;flex-shrink:0;
+}
+.clock-digits{
+  font-family:var(--f-mono);font-size:19px;font-weight:700;
+  font-variant-numeric:tabular-nums;letter-spacing:.04em;
+}
+.clock-lbl{font-size:10px;margin-top:3px;font-family:var(--f-mono);letter-spacing:.04em}
+.clock-lbl.work{color:var(--green)}
+.clock-lbl.owork{color:var(--red)}
+
+.sb-logout{
+  margin:.6rem .75rem 1rem;
+  background:transparent;border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text2);
+  font-family:var(--f-mono);font-size:11px;
+  padding:8px;cursor:pointer;
+  transition:all .2s var(--ease-out);
+  width:calc(100% - 1.5rem);letter-spacing:.05em;
+}
+.sb-logout:hover{
+  border-color:rgba(255,79,79,.3);color:var(--red);background:var(--red-dim);
+}
+
+/* ═══════════════════════════════════════
+   MAIN CONTENT
+═══════════════════════════════════════ */
+.main{
+  margin-left:230px;padding-top:54px;
+  min-height:100vh;
+}
+
+.view{display:none;padding:1.5rem;flex-direction:column;gap:1.1rem;animation:fadeUp .3s var(--ease-out)}
+.view.active{display:flex}
+
+/* ── ALERT BANNER ── */
+.alert-banner{
+  display:none;
+  background:rgba(245,166,35,.07);
+  border:1px solid rgba(245,166,35,.2);
+  border-left:3px solid var(--amber);
+  border-radius:var(--r);
+  padding:.65rem 1rem;
+  font-size:12px;color:var(--amber);
+  align-items:center;gap:8px;
+}
+.alert-pip{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--amber);flex-shrink:0;
+  animation:pulseAmber 1.5s infinite;
+}
+
+/* ── PAGE HEADER ── */
+.page-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding-bottom:.9rem;border-bottom:1px solid var(--border);
+}
+.page-title{font-family:var(--f-head);font-size:17px;font-weight:700;letter-spacing:.01em}
+.page-desc{font-size:12px;color:var(--text2);margin-top:3px}
+
+/* ── STAT CARDS ── */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--rl);padding:1rem 1.1rem;
+  position:relative;overflow:hidden;
+  transition:border-color .25s,transform .2s var(--ease-spring);
+  cursor:default;
+}
+.stat-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.stat-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  border-radius:var(--rl) var(--rl) 0 0;
+}
+.sc-total::after{background:var(--blue)}
+.sc-on::after   {background:var(--green)}
+.sc-sleep::after{background:var(--amber)}
+.sc-off::after  {background:var(--red)}
+
+.stat-lbl{font-size:10px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+.stat-num{font-family:var(--f-head);font-size:34px;font-weight:800;line-height:1;transition:all .3s}
+.stat-foot{font-size:11px;color:var(--text3);margin-top:.35rem;font-family:var(--f-mono)}
+.sc-total .stat-num{color:var(--blue)}
+.sc-on    .stat-num{color:var(--green)}
+.sc-sleep .stat-num{color:var(--amber)}
+.sc-off   .stat-num{color:var(--red)}
+
+/* ── SECTION BAR ── */
+.sec-bar{display:flex;align-items:center;justify-content:space-between}
+.sec-lbl{font-family:var(--f-mono);font-size:10px;color:var(--text2);letter-spacing:.09em;text-transform:uppercase}
+
+.filter-row{display:flex;gap:4px}
+.filt{
+  background:transparent;border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text2);
+  font-family:var(--f-mono);font-size:10px;
+  padding:4px 10px;cursor:pointer;
+  transition:all .2s var(--ease-out);letter-spacing:.05em;
+}
+.filt:hover{color:var(--text);border-color:var(--border3)}
+.filt.active{background:var(--green-dim);border-color:rgba(0,217,126,.3);color:var(--green)}
+
+/* ── MONITOR GRID ── */
+.mon-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+
+.mon-tile{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--rl);padding:.8rem .9rem;
+  cursor:pointer;position:relative;overflow:hidden;
+  user-select:none;
+  transition:border-color .2s,background .2s,transform .2s var(--ease-spring);
+}
+.mon-tile::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  opacity:0;transition:opacity .2s;background:var(--green);
+}
+.mon-tile:hover{
+  border-color:var(--border3);background:var(--panel);
+  transform:translateY(-2px);
+}
+.mon-tile:hover::before{opacity:1}
+.mon-tile:active{transform:translateY(0) scale(.98)}
+.mon-tile.sel{border-color:rgba(61,158,255,.4);background:rgba(61,158,255,.05)}
+.mon-tile.offline{opacity:.42}
+
+.tile-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.55rem}
+.tile-id{font-family:var(--f-mono);font-size:9px;color:var(--text3);letter-spacing:.06em}
+.status-pip{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:2px;transition:all .3s}
+.pip-on   {background:var(--green);animation:pulse 2s infinite}
+.pip-sleep{background:var(--amber)}
+.pip-off  {background:var(--red)}
+.pip-disc {background:var(--text3)}
+
+.tile-room{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tile-st{font-family:var(--f-mono);font-size:10px;letter-spacing:.03em}
+.ts-on   {color:var(--green)}
+.ts-sleep{color:var(--amber)}
+.ts-off  {color:var(--red)}
+.ts-disc {color:var(--text3)}
+
+/* ── DETAIL DRAWER ── */
+.detail-drawer{
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-left:2px solid var(--blue);
+  border-radius:var(--rl);padding:1.2rem;
+  display:none;animation:scaleIn .25s var(--ease-spring);
+}
+.drawer-top{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);
+}
+.drawer-title{font-family:var(--f-head);font-size:15px;font-weight:700}
+.drawer-sub{font-size:11px;color:var(--text2);font-family:var(--f-mono);margin-top:3px;letter-spacing:.03em}
+
+.st-pill{
+  font-family:var(--f-mono);font-size:10px;font-weight:700;
+  padding:4px 12px;border-radius:20px;letter-spacing:.08em;text-transform:uppercase;
+  transition:all .3s;
+}
+.pill-on   {background:var(--green-dim);color:var(--green);border:1px solid rgba(0,217,126,.2)}
+.pill-sleep{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,.2)}
+.pill-off  {background:var(--red-dim)  ;color:var(--red)  ;border:1px solid rgba(255,79,79,.2)}
+.pill-disc {background:rgba(51,65,85,.3);color:var(--text3);border:1px solid var(--border)}
+
+.drawer-info{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:1rem}
+.info-r{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.48rem 0;border-bottom:1px solid var(--border);font-size:12px;gap:12px;
+}
+.info-r:last-child{border-bottom:none}
+.info-k{color:var(--text2);flex-shrink:0}
+.info-v{font-family:var(--f-mono);font-size:11px;text-align:right}
+.info-v.ok {color:var(--green)}
+.info-v.bad{color:var(--red)}
+
+/* ── ACTION BUTTONS ── */
+.act-row{
+  display:flex;gap:6px;flex-wrap:wrap;
+  padding-top:.75rem;border-top:1px solid var(--border);
+}
+
+.btn{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--panel);border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text2);
+  font-family:var(--f-mono);font-size:11px;padding:6px 13px;
+  cursor:pointer;letter-spacing:.04em;text-transform:uppercase;
+  transition:all .2s var(--ease-out),transform .15s var(--ease-spring);
+  user-select:none;
+}
+.btn:hover{color:var(--text);border-color:var(--border3);background:var(--elevated)}
+.btn:active{transform:scale(.96)}
+
+.btn-g{border-color:rgba(0,217,126,.25);color:var(--green)}
+.btn-g:hover{background:var(--green-dim);border-color:rgba(0,217,126,.4);box-shadow:0 2px 12px rgba(0,217,126,.15)}
+.btn-r{border-color:rgba(255,79,79,.25);color:var(--red)}
+.btn-r:hover{background:var(--red-dim);border-color:rgba(255,79,79,.4)}
+.btn-b{border-color:rgba(61,158,255,.25);color:var(--blue)}
+.btn-b:hover{background:var(--blue-dim);border-color:rgba(61,158,255,.4)}
+.btn-y{border-color:rgba(245,166,35,.25);color:var(--amber)}
+.btn-y:hover{background:var(--amber-dim);border-color:rgba(245,166,35,.4)}
+.btn-p{border-color:rgba(167,139,250,.25);color:var(--purple)}
+.btn-p:hover{background:var(--purple-dim);border-color:rgba(167,139,250,.4)}
+
+/* loading spinner on btn */
+.btn.loading::after{
+  content:'';width:10px;height:10px;
+  border:1.5px solid currentColor;border-top-color:transparent;
+  border-radius:50%;animation:spin .6s linear infinite;
+}
+
+/* ── SCREENSHOT ── */
+.ss-wrap{
+  margin-top:.75rem;background:var(--panel);
+  border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;min-height:80px;
+  display:flex;align-items:center;justify-content:center;
+}
+.ss-hint{font-size:12px;color:var(--text3);font-family:var(--f-mono);padding:1.5rem;text-align:center}
+.ss-wrap img{width:100%;display:block;animation:fadeIn .3s ease}
+
+/* ── BULK BAR ── */
+.bulk-bar{
+  display:flex;gap:6px;align-items:center;
+  padding:.7rem .9rem;background:var(--panel);
+  border:1px solid var(--border);border-radius:var(--r);
+  flex-wrap:wrap;
+}
+.bulk-lbl{font-size:11px;color:var(--text2);font-family:var(--f-mono);letter-spacing:.05em;margin-right:4px}
+
+/* ── GRID + CARDS ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--rl);padding:1rem 1.1rem;
+  transition:border-color .2s;
+}
+.card:hover{border-color:var(--border2)}
+
+.card-head{
+  font-size:10px;font-weight:600;color:var(--text2);
+  letter-spacing:.09em;text-transform:uppercase;
+  margin-bottom:.8rem;padding-bottom:.55rem;
+  border-bottom:1px solid var(--border);
+  font-family:var(--f-mono);
+  display:flex;justify-content:space-between;align-items:center;
+}
+
+/* ── PROGRESS BARS ── */
+.pbar-list{display:flex;flex-direction:column;gap:.7rem}
+.pbar-top{display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px}
+.pbar-k{color:var(--text2)}
+.pbar-track{height:5px;background:var(--panel);border-radius:3px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:3px;transition:width .6s var(--ease-out)}
+.fill-g{background:var(--green)}
+.fill-a{background:var(--amber)}
+.fill-r{background:var(--red)}
+.fill-b{background:var(--blue)}
+
+/* ── SCHEDULE ── */
+.time-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.85rem}
+.time-card{background:var(--panel);border-radius:var(--r);padding:.75rem;text-align:center}
+.tc-lbl{font-size:10px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.tc-val{font-family:var(--f-head);font-size:26px;font-weight:800}
+.tc-val.g{color:var(--green)}
+.tc-val.r{color:var(--red)}
+
+.tl-track{
+  height:38px;background:var(--panel);
+  border:1px solid var(--border);border-radius:var(--r);
+  position:relative;overflow:hidden;margin-bottom:4px;
+}
+.tl-zone{
+  position:absolute;left:29.2%;width:41.6%;height:100%;
+  background:rgba(0,217,126,.09);
+  border-left:1px solid rgba(0,217,126,.3);
+  border-right:1px solid rgba(0,217,126,.3);
+}
+.tl-now{
+  position:absolute;width:2px;height:100%;
+  background:var(--red);box-shadow:0 0 6px var(--red);
+  transition:left .5s;
+}
+.tl-lbl{
+  position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;
+  font-size:11px;color:rgba(0,217,126,.6);
+  font-family:var(--f-mono);letter-spacing:.05em;
+}
+.tl-edges{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--f-mono)}
+
+.sl-rows{display:flex;flex-direction:column}
+.sl-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.5rem 0;border-bottom:1px solid var(--border);font-size:12px;
+}
+.sl-row:last-child{border-bottom:none}
+.sl-k{color:var(--text2)}
+.sl-v{font-family:var(--f-mono);font-size:11px}
+.sl-v.ok{color:var(--green)}
+.sl-v.bad{color:var(--red)}
+
+/* ── WIFI VIEW ── */
+.wifi-hero{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--rl);padding:1.5rem;
+  display:flex;align-items:center;gap:1.5rem;
+}
+.wifi-anim{
+  width:80px;height:80px;flex-shrink:0;
+  position:relative;display:flex;align-items:center;justify-content:center;
+}
+.wifi-ring{
+  position:absolute;width:100%;height:100%;
+  border:1.5px solid var(--green);
+  border-radius:50%;opacity:0;
+}
+.wifi-ring:nth-child(1){animation:wifiRing 2s ease infinite 0s}
+.wifi-ring:nth-child(2){animation:wifiRing 2s ease infinite .5s}
+.wifi-ring:nth-child(3){animation:wifiRing 2s ease infinite 1s}
+.wifi-core{
+  width:28px;height:28px;
+  background:var(--green-dim);border:1px solid rgba(0,217,126,.3);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;z-index:1;
+}
+
+.wifi-info-list{flex:1;display:flex;flex-direction:column;gap:6px}
+.wifi-info-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.45rem .7rem;background:var(--elevated);
+  border-radius:var(--r);font-size:12px;
+}
+.wifi-info-k{color:var(--text2)}
+.wifi-info-v{font-family:var(--f-mono);font-size:11px;color:var(--blue)}
+
+.device-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+
+.device-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:.8rem;
+  transition:all .2s var(--ease-out);
+}
+.device-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.device-card.agent-linked{
+  border-color:rgba(0,217,126,.25);
+  background:rgba(0,217,126,.04);
+}
+
+.dc-top{display:flex;align-items:center;gap:8px;margin-bottom:.5rem}
+.dc-icon{
+  width:28px;height:28px;border-radius:var(--r);
+  background:var(--panel);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+  flex-shrink:0;
+}
+.dc-name{font-size:12px;font-weight:500}
+.dc-type{font-size:10px;color:var(--text2);font-family:var(--f-mono);margin-top:1px}
+.dc-status{
+  margin-left:auto;font-size:10px;font-family:var(--f-mono);
+  padding:2px 8px;border-radius:20px;
+}
+.dc-status.online{background:var(--green-dim);color:var(--green)}
+.dc-status.offline{background:var(--red-dim);color:var(--red)}
+
+/* ── LOGS ── */
+.terminal{
+  background:#060a0e;border:1px solid var(--border2);
+  border-radius:var(--r);padding:.75rem;
+  font-family:var(--f-mono);font-size:11.5px;
+  max-height:360px;overflow-y:auto;line-height:1.65;
+}
+.t-bar{
+  background:var(--panel);border:1px solid var(--border2);
+  border-bottom:none;border-radius:var(--r) var(--r) 0 0;
+  padding:.4rem .75rem;display:flex;align-items:center;gap:6px;
+}
+.t-dot{width:9px;height:9px;border-radius:50%}
+
+.log-line{padding:1.5px 0;border-bottom:1px solid rgba(255,255,255,.025);animation:fadeIn .15s ease}
+.log-line:last-child{border-bottom:none}
+.l-time{color:#2d4460;margin-right:8px}
+.l-ok   .l-msg{color:var(--green)}
+.l-warn .l-msg{color:var(--amber)}
+.l-err  .l-msg{color:var(--red)}
+.l-info .l-msg{color:var(--blue)}
+
+/* ── DASHBOARD CHARTS ── */
+.dash-grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+
+.chart-wrap{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--rl);padding:1rem 1.1rem;
+}
+
+.activity-bars{
+  display:flex;align-items:flex-end;gap:4px;
+  height:80px;padding-top:.5rem;
+}
+.ab-col{
+  flex:1;background:var(--panel);border-radius:3px 3px 0 0;
+  min-height:4px;transition:height .5s var(--ease-out);
+  cursor:pointer;position:relative;
+}
+.ab-col.active{background:var(--green);opacity:.7}
+.ab-col.active:hover{opacity:1}
+.ab-col:hover .ab-tooltip{display:block}
+.ab-tooltip{
+  display:none;position:absolute;bottom:calc(100% + 4px);left:50%;
+  transform:translateX(-50%);background:var(--elevated);
+  border:1px solid var(--border2);border-radius:4px;
+  padding:3px 8px;font-size:10px;white-space:nowrap;z-index:10;
+}
+
+.donut-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:.75rem;padding:.5rem 0;
+}
+.donut-svg{overflow:visible}
+
+.legend-list{display:flex;flex-direction:column;gap:5px;width:100%}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+
+/* ── INSTALL VIEW ── */
+.install-arch{
+  background:#060a0e;border:1px solid var(--border2);
+  border-radius:var(--r);padding:1.25rem;
+  font-family:var(--f-mono);font-size:12px;color:var(--blue);
+  line-height:1.8;white-space:pre;
+}
+.ps-box{
+  background:#060a0e;border:1px solid var(--border2);
+  border-radius:var(--r);padding:1rem;
+  font-family:var(--f-mono);font-size:11.5px;line-height:1.7;
+  overflow-x:auto;white-space:pre;color:#9cdcfe;
+}
+.ps-c{color:#4a6741}
+.ps-k{color:#c586c0}
+.ps-s{color:#ce9178}
+.ps-m{color:#dcdcaa}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:1.5rem;right:1.5rem;
+  background:var(--surface);border:1px solid var(--border2);
+  border-left:3px solid var(--green);border-radius:var(--r);
+  padding:.7rem 1.1rem;font-size:12px;font-family:var(--f-mono);
+  color:var(--text);z-index:9999;display:none;max-width:300px;
+  animation:slideRight .25s var(--ease-out);
+}
+#toast.warn{border-left-color:var(--amber)}
+#toast.err {border-left-color:var(--red)}
+
+/* ── LIGHT THEME ── */
+body.light{
+  --bg:#f0f2f6;--surface:#ffffff;--panel:#f5f7fa;--elevated:#edf0f5;
+  --border:rgba(0,0,0,.07);--border2:rgba(0,0,0,.11);--border3:rgba(0,0,0,.17);
+  --text:#1a2236;--text2:#64748b;--text3:#94a3b8;
+}
+body.light .topbar{background:rgba(240,242,246,.85)}
+body.light .terminal,.body.light .ps-box,.body.light .install-arch{background:#1a1f2e}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div id="login-screen">
+  <div class="login-bg-grid"></div>
+  <div class="login-glow"></div>
+
+  <!-- Lang top-right -->
+  <div class="login-lang-bar">
+    <button class="lang-chip active" onclick="setLang('uz',this)">O'ZB</button>
+    <button class="lang-chip" onclick="setLang('ru',this)">РУС</button>
+  </div>
+
+  <div class="login-card">
+    <div class="login-header">
+      <div class="brand-mark">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div>
+        <div class="brand-name">Monitor Control</div>
+        <div class="brand-ver">MCS v3.0 — ADMIN</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-lbl" id="ll-user">Foydalanuvchi</label>
+      <input class="field-input" id="li-user" type="text" value="admin" autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field-lbl" id="ll-pass">Parol</label>
+      <input class="field-input" id="li-pass" type="password" placeholder="••••••••"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+
+    <button class="login-btn" id="ll-btn" onclick="doLogin()">KIRISH</button>
+    <div class="login-msg login-err" id="lerr"></div>
+    <div class="login-msg login-info" id="linfo"></div>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-page" id="tb-page">Dashboard</div>
+      <div class="topbar-breadcrumb" id="tb-crumb">MCS v3.0</div>
+    </div>
+    <div class="topbar-right">
+      <!-- Lang top-right in app -->
+      <div class="topbar-lang">
+        <button class="tlang active" onclick="setLangApp('uz',this)">O'ZB</button>
+        <button class="tlang" onclick="setLangApp('ru',this)">РУС</button>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Ko'z qulayligi">☀</button>
+      <div class="ws-badge off" id="ws-badge">
+        <div class="ws-dot"></div>
+        <span id="ws-txt">Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-mark"><span></span><span></span><span></span><span></span></div>
+      <div>
+        <div class="sb-brand">MCS</div>
+        <div class="sb-sub">Monitor Control</div>
+      </div>
+    </div>
+
+    <div class="sb-profile">
+      <div class="sb-avatar">SA</div>
+      <div>
+        <div class="sb-name">Saidikrom</div>
+        <div class="sb-role">ADMIN</div>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <div class="nav-sec" id="ns-main">Boshqaruv</div>
+      <div class="nav-item active" onclick="gotoView('dashboard',this)" id="ni-dash">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        <span id="nav-dash">Dashboard</span>
+      </div>
+      <div class="nav-item" onclick="gotoView('monitors',this)" id="ni-mon">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M5 14h6M8 12v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="nav-mon">Monitorlar</span>
+        <span class="nav-badge" id="nb-off" style="display:none">0</span>
+      </div>
+      <div class="nav-item" onclick="gotoView('wifi',this)" id="ni-wifi">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <path d="M1 6c3.87-3.87 10.13-3.87 14 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M3.5 8.5c2.49-2.49 6.51-2.49 9 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M6 11c1.1-1.1 2.9-1.1 4 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <circle cx="8" cy="13.5" r=".8" fill="currentColor"/>
+        </svg>
+        <span id="nav-wifi">WiFi Tarmoq</span>
+      </div>
+      <div class="nav-item" onclick="gotoView('schedule',this)" id="ni-sched">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M8 4.5V8l2.5 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="nav-sched">Jadval</span>
+      </div>
+
+      <div class="nav-sec" id="ns-sys">Tizim</div>
+      <div class="nav-item" onclick="gotoView('logs',this)" id="ni-logs">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="nav-logs">Loglar</span>
+      </div>
+      <div class="nav-item" onclick="gotoView('install',this)" id="ni-inst">
+        <svg class="nav-ico" viewBox="0 0 16 16" fill="none">
+          <path d="M8 2v8M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1 13h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="nav-inst">O'rnatish</span>
+      </div>
+    </nav>
+
+    <div class="sb-clock">
+      <div class="clock-digits" id="sb-clock">00:00:00</div>
+      <div class="clock-lbl" id="sb-clbl">—</div>
+    </div>
+
+    <button class="sb-logout" onclick="doLogout()" id="btn-logout">↩ Chiqish</button>
+  </aside>
+
+  <!-- ════════════════ MAIN ════════════════ -->
+  <main class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="view active" id="view-dashboard">
+      <div class="alert-banner" id="alert-bar">
+        <div class="alert-pip"></div>
+        <span id="alert-txt">Diqqat!</span>
+      </div>
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-dash">Dashboard</div>
+          <div class="page-desc" id="pd-dash">Umumiy ko'rinish</div>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card sc-total">
+          <div class="stat-lbl" id="sl-total">Jami ulangan</div>
+          <div class="stat-num" id="cnt-total">0</div>
+          <div class="stat-foot" id="sf-total">agent</div>
+        </div>
+        <div class="stat-card sc-on">
+          <div class="stat-lbl" id="sl-on">Faol</div>
+          <div class="stat-num" id="cnt-on">0</div>
+          <div class="stat-foot" id="sf-on">yoqiq</div>
+        </div>
+        <div class="stat-card sc-sleep">
+          <div class="stat-lbl" id="sl-sleep">Sleep</div>
+          <div class="stat-num" id="cnt-sleep">0</div>
+          <div class="stat-foot" id="sf-sleep">kutmoqda</div>
+        </div>
+        <div class="stat-card sc-off">
+          <div class="stat-lbl" id="sl-off">Offline</div>
+          <div class="stat-num" id="cnt-off">0</div>
+          <div class="stat-foot" id="sf-off">ulanmagan</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="chart-wrap">
+          <div class="card-head" id="ch-activity">24 soatlik faollik</div>
+          <div class="activity-bars" id="activity-bars"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text3);font-family:var(--f-mono)">
+            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head" id="ch-dist">Taqsimot</div>
+          <div class="donut-wrap">
+            <svg class="donut-svg" width="100" height="100" viewBox="0 0 100 100" id="donut-svg">
+              <circle cx="50" cy="50" r="38" fill="none" stroke="var(--panel)" stroke-width="14"/>
+              <circle cx="50" cy="50" r="38" fill="none" stroke="var(--green)" stroke-width="14"
+                stroke-dasharray="0 239" stroke-linecap="round"
+                transform="rotate(-90 50 50)" id="donut-on" style="transition:stroke-dasharray .6s var(--ease-out)"/>
+              <circle cx="50" cy="50" r="38" fill="none" stroke="var(--amber)" stroke-width="14"
+                stroke-dasharray="0 239" stroke-linecap="round"
+                transform="rotate(-90 50 50)" id="donut-sleep" style="transition:stroke-dasharray .6s var(--ease-out)"/>
+            </svg>
+            <div class="legend-list">
+              <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div><span id="leg-on">Faol: 0</span></div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div><span id="leg-sleep">Sleep: 0</span></div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div><span id="leg-off">Offline: 0</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" id="ch-quick">Tezkor boshqaruv</div>
+        <div class="bulk-bar" style="background:transparent;border:none;padding:0">
+          <button class="btn btn-g" onclick="sendAll('monitor_on')">▶ Barchasini yoq</button>
+          <button class="btn btn-y" onclick="sendAll('sleep')">■ Barchasini sleep</button>
+          <button class="btn btn-r" onclick="sendAll('monitor_off')">■ Barchasini o'chir</button>
+          <button class="btn btn-r" onclick="sendAll('block_apps')">⊘ Dastur blok</button>
+          <button class="btn btn-b" onclick="sendAll('lock')">🔒 Barchasini bloklash</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MONITORS ── -->
+    <div class="view" id="view-monitors">
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-mon">Monitorlar</div>
+          <div class="page-desc" id="pd-mon">Real vaqt boshqaruvi</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-g" onclick="sendAll('monitor_on')">▶ Barchasini yoq</button>
+          <button class="btn btn-r" onclick="sendAll('monitor_off')">■ Barchasini o'chir</button>
+        </div>
+      </div>
+
+      <div class="mon-add-card">
+        <div class="mon-add-head">✚ Yangi Monitor Qo'shish</div>
+        <div class="mon-add-fields">
+          <input id="new-monitor-id" class="field-input" type="text" placeholder="Monitor ID (01, 02...)" />
+          <input id="new-monitor-room" class="field-input" type="text" placeholder="Xona nomi" />
+          <button class="btn btn-g" onclick="addMonitor()" style="white-space:nowrap">✚ Qo'shish</button>
+        </div>
+      </div>
+
+      <div class="mon-stats-row">
+        <div class="mon-stat-mini">
+          <div class="mon-stat-mini-val" id="mon-total">0</div>
+          <div class="mon-stat-mini-lbl">JAMI</div>
+        </div>
+        <div class="mon-stat-mini">
+          <div class="mon-stat-mini-val" style="color:var(--amber)" id="mon-configured">0</div>
+          <div class="mon-stat-mini-lbl">QO'SHILGAN</div>
+        </div>
+        <div class="mon-stat-mini">
+          <div class="mon-stat-mini-val" style="color:var(--red)" id="mon-offline">0</div>
+          <div class="mon-stat-mini-lbl">OFFLINE</div>
+        </div>
+      </div>
+
+      <div class="sec-bar">
+        <span class="sec-lbl" id="grid-lbl">Barcha monitorlar</span>
+        <div class="filter-row">
+          <button class="filt active" onclick="doFilt('all',this)" id="f-all">Barchasi</button>
+          <button class="filt" onclick="doFilt('on',this)" id="f-on">Faol</button>
+          <button class="filt" onclick="doFilt('sleep',this)" id="f-sleep">Sleep</button>
+          <button class="filt" onclick="doFilt('offline',this)" id="f-off">Offline</button>
+        </div>
+      </div>
+
+      <div class="mon-grid" id="mon-grid">
+        <div style="grid-column:span 5;padding:2rem;text-align:center;color:var(--text3);font-family:var(--f-mono);font-size:12px">
+          Agentlar ulanishini kutmoqda...
+        </div>
+      </div>
+
+      <div class="detail-drawer" id="detail-drawer">
+        <div class="drawer-top">
+          <div>
+            <div class="drawer-title" id="d-title">—</div>
+            <div class="drawer-sub" id="d-sub">—</div>
+          </div>
+          <span class="st-pill" id="d-pill">—</span>
+        </div>
+        <div class="drawer-info">
+          <div>
+            <div class="info-r"><span class="info-k" id="ik-room">Xona</span><span class="info-v" id="d-room">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-host">Kompyuter</span><span class="info-v" id="d-host">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-os">OS</span><span class="info-v" id="d-os">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-last">Oxirgi faollik</span><span class="info-v" id="d-last">—</span></div>
+          </div>
+          <div>
+            <div class="info-r"><span class="info-k" id="ik-st">Holat</span><span class="info-v ok" id="d-st">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-plat">Platforma</span><span class="info-v ok" id="d-plat">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-ad">Reklama bloki</span><span class="info-v ok" id="d-ad">—</span></div>
+            <div class="info-r"><span class="info-k" id="ik-slp">Sleep</span><span class="info-v ok" id="d-slp">5 daqiqa</span></div>
+          </div>
+        </div>
+        <div class="act-row">
+          <button class="btn btn-g" onclick="doCmd('monitor_on')">▶ Yoqish</button>
+          <button class="btn btn-y" onclick="doCmd('sleep')">■ Sleep</button>
+          <button class="btn btn-r" onclick="doCmd('monitor_off')">■ O'chirish</button>
+          <button class="btn" onclick="doCmd('restart')">↺ Restart</button>
+          <button class="btn" onclick="doCmd('lock')">🔒 Bloklash</button>
+          <button class="btn btn-b" onclick="doCmd('screenshot')">⊡ Screenshot</button>
+          <button class="btn btn-r" onclick="doCmd('block_apps')">⊘ Dastur blok</button>
+          <button class="btn btn-p" onclick="doCmd('ping')">◎ Ping</button>
+          <button class="btn btn-r" style="margin-left:auto" onclick="removeMonitor(selId)">🗑 O'chirish</button>
+        </div>
+        <div class="ss-wrap" id="ss-wrap">
+          <div class="ss-hint" id="ss-hint">Screenshot olish uchun tugmani bosing</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── WIFI ── -->
+    <div class="view" id="view-wifi">
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-wifi">WiFi Tarmoq</div>
+          <div class="page-desc" id="pd-wifi">Tarmoqdagi qurilmalar va ulanishlar</div>
+        </div>
+        <button class="btn btn-b" onclick="doWifiScan()">↺ Tarmoqni yangilash</button>
+      </div>
+
+      <div class="wifi-hero">
+        <div class="wifi-anim">
+          <div class="wifi-ring"></div>
+          <div class="wifi-ring"></div>
+          <div class="wifi-ring"></div>
+          <div class="wifi-core">📡</div>
+        </div>
+        <div class="wifi-info-list" id="wifi-info-list">
+          <div class="wifi-info-item"><span class="wifi-info-k" id="wk-adapter">Tarmoq adapteri</span><span class="wifi-info-v" id="wv-adapter">—</span></div>
+          <div class="wifi-info-item"><span class="wifi-info-k" id="wk-server">Server manzili</span><span class="wifi-info-v" id="wv-server">—</span></div>
+          <div class="wifi-info-item"><span class="wifi-info-k" id="wk-agents">Ulangan agentlar</span><span class="wifi-info-v" id="wv-agents">0</span></div>
+          <div class="wifi-info-item"><span class="wifi-info-k" id="wk-status">Tarmoq holati</span><span class="wifi-info-v" style="color:var(--green)" id="wv-status">Faol</span></div>
+        </div>
+      </div>
+
+      <div class="sec-bar">
+        <span class="sec-lbl" id="wl-devices">Ulangan monitorlar</span>
+      </div>
+
+      <div class="device-grid" id="device-grid">
+        <div style="color:var(--text3);font-family:var(--f-mono);font-size:12px;padding:1rem">
+          Tarmoq ma'lumotlari yuklanmoqda...
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCHEDULE ── -->
+    <div class="view" id="view-schedule">
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-sched">Ish vaqti jadvali</div>
+          <div class="page-desc">Avtomatik yoqish va o'chirish</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head" id="ch-hours">Ish soatlari</div>
+          <div class="time-cards">
+            <div class="time-card">
+              <div class="tc-lbl" id="tc-start">Boshlanish</div>
+              <div class="tc-val g">07:00</div>
+            </div>
+            <div class="time-card">
+              <div class="tc-lbl" id="tc-end">Tugash</div>
+              <div class="tc-val r">17:00</div>
+            </div>
+          </div>
+          <div class="tl-track">
+            <div class="tl-zone"></div>
+            <div class="tl-now" id="tl-now"></div>
+            <div class="tl-lbl" id="tl-lbl">07:00 – 17:00</div>
+          </div>
+          <div class="tl-edges"><span>00:00</span><span>12:00</span><span>24:00</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head" id="ch-sleep">Sleep sozlamalari</div>
+          <div class="sl-rows">
+            <div class="sl-row"><span class="sl-k" id="sk-idle">Harakatsizlik</span><span class="sl-v ok">5 daqiqa</span></div>
+            <div class="sl-row"><span class="sl-k" id="sk-wake">Uyg'onish</span><span class="sl-v">Sichqon / Klaviatura</span></div>
+            <div class="sl-row"><span class="sl-k" id="sk-off">To'liq o'chirish</span><span class="sl-v bad" id="sk-off-v">Man etilgan</span></div>
+            <div class="sl-row"><span class="sl-k" id="sk-en">Energiya</span><span class="sl-v ok">~60% tejash</span></div>
+            <div class="sl-row"><span class="sl-k" id="sk-cont">Uzluksizlik</span><span class="sl-v ok" id="sk-cont-v">Ta'minlangan</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" id="ch-stats">Bugungi statistika</div>
+        <div class="pbar-list">
+          <div>
+            <div class="pbar-top"><span class="pbar-k" id="pb-on">Faol</span><span style="color:var(--green);font-family:var(--f-mono);font-size:11px" id="pct-on">0%</span></div>
+            <div class="pbar-track"><div class="pbar-fill fill-g" id="bar-on" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="pbar-top"><span class="pbar-k" id="pb-sleep">Sleep</span><span style="color:var(--amber);font-family:var(--f-mono);font-size:11px" id="pct-sleep">0%</span></div>
+            <div class="pbar-track"><div class="pbar-fill fill-a" id="bar-sleep" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="pbar-top"><span class="pbar-k" id="pb-off">Offline</span><span style="color:var(--red);font-family:var(--f-mono);font-size:11px" id="pct-off">0%</span></div>
+            <div class="pbar-track"><div class="pbar-fill fill-r" id="bar-off" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LOGS ── -->
+    <div class="view" id="view-logs">
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-logs">Tizim loglari</div>
+          <div class="page-desc">Barcha harakatlar qayd etiladi</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="clearLogs()" id="btn-clr">Tozalash</button>
+          <button class="btn btn-b" onclick="exportLogs()" id="btn-exp">↓ Export</button>
+        </div>
+      </div>
+      <div class="t-bar">
+        <div class="t-dot" style="background:#ff5f57"></div>
+        <div class="t-dot" style="background:#febc2e"></div>
+        <div class="t-dot" style="background:#28c840"></div>
+        <span style="font-family:var(--f-mono);font-size:10px;color:var(--text3);margin-left:6px;letter-spacing:.06em" id="log-bar-lbl">AUDIT LOG — REAL VAQT</span>
+      </div>
+      <div class="terminal" id="log-box"></div>
+    </div>
+
+    <!-- ── INSTALL ── -->
+    <div class="view" id="view-install">
+      <div class="page-head">
+        <div>
+          <div class="page-title" id="ph-inst">Agent o'rnatish</div>
+          <div class="page-desc">Har bir kompyuterga o'rnatiladigan agent</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Tizim arxitekturasi</div>
+        <div class="install-arch">┌──────────────────────────────────────────────────────┐
+│            MONITOR CONTROL SYSTEM v3.0              │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│   [Android Ilova]          [Web Panel]               │
+│         │                       │                    │
+│         └───────────┬───────────┘                    │
+│                     ▼                                │
+│         ┌────────────────────────┐                   │
+│         │   Node.js Server :3000  │                   │
+│         │   WebSocket + REST API  │                   │
+│         └──────────┬─────────────┘                   │
+│                    │   WiFi / LAN                     │
+│       ┌────────────┼────────────┐                    │
+│       ▼            ▼            ▼                    │
+│  [Agent M01]  [Agent M02]  [Agent M20]               │
+│  Xona 101     Xona 102     Xona 402                  │
+└──────────────────────────────────────────────────────┘</div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">1-qadam: Server</div>
+          <div class="t-bar" style="border-radius:var(--r) var(--r) 0 0">
+            <div class="t-dot" style="background:#28c840"></div>
+            <span style="font-family:var(--f-mono);font-size:10px;color:var(--text3);margin-left:6px">start_server.bat</span>
+          </div>
+          <div class="ps-box"><span class="ps-c"># Server papkasiga o'ting</span>
+<span class="ps-m">cd</span> C:\mcs\backend
+
+<span class="ps-c"># Kutubxonalar (bir marta)</span>
+<span class="ps-m">npm install</span>
+
+<span class="ps-c"># Ishga tushirish</span>
+<span class="ps-m">node</span> server.js</div>
+        </div>
+        <div class="card">
+          <div class="card-head">2-qadam: Har bir kompyuter</div>
+          <div class="t-bar" style="border-radius:var(--r) var(--r) 0 0">
+            <div class="t-dot" style="background:#28c840"></div>
+            <span style="font-family:var(--f-mono);font-size:10px;color:var(--text3);margin-left:6px">install.bat</span>
+          </div>
+          <div class="ps-box"><span class="ps-c"># agent.py + install.bat
+# har bir kompyuterga ko'chiring</span>
+
+<span class="ps-m">install.bat</span>
+
+Monitor raqami: <span class="ps-s">01</span>
+Xona nomi:      <span class="ps-s">Xona 101</span>
+
+<span class="ps-c"># Startup ga avtomatik qo'shiladi</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let ws=null, lang='uz', selId=null, filt='all';
+let agents={}, logs=[], networkInfo=[];
+let reconnectTimer=null, clockTimer=null, manualDisconnect=false;
+let statusHistory = Array.from({length:24},()=>0);
+
+function appendStatusHistory(value){
+  statusHistory.push(value);
+  if(statusHistory.length>24) statusHistory.shift();
+}
+
+// ══════════════════════════════════════
+// TRANSLATIONS
+// ══════════════════════════════════════
+const T={
+  uz:{
+    userLbl:'Foydalanuvchi',passLbl:'Parol',loginBtn:'KIRISH',
+    loginErr:"Noto'g'ri login yoki parol",connecting:'Serverga ulanmoqda...',
+    nsMain:'Boshqaruv',nsSys:'Tizim',
+    navDash:'Dashboard',navMon:'Monitorlar',navWifi:'WiFi Tarmoq',
+    navSched:'Jadval',navLogs:'Loglar',navInst:"O'rnatish",
+    wsOn:'Ulangan',wsOff:'Offline',
+    phDash:'Dashboard',pdDash:"Umumiy ko'rinish",
+    phMon:'Monitorlar',pdMon:'Real vaqt boshqaruvi',
+    phWifi:'WiFi Tarmoq',pdWifi:'Tarmoqdagi qurilmalar',
+    phSched:'Ish vaqti jadvali',phLogs:'Tizim loglari',phInst:"Agent o'rnatish",
+    slTotal:'Jami ulangan',sfTotal:'agent',
+    slOn:'Faol',sfOn:'yoqiq',slSleep:'Sleep',sfSleep:'kutmoqda',slOff:'Offline',sfOff:'ulanmagan',
+    chActivity:'24 soatlik faollik',chDist:'Taqsimot',chQuick:'Tezkor boshqaruv',
+    gridLbl:'Barcha monitorlar',
+    fAll:'Barchasi',fOn:'Faol',fSleep:'Sleep',fOff:'Offline',
+    stOn:'Faol',stSleep:'Sleep',stOff:"O'chiq",stDisc:'Offline',
+    ikRoom:'Xona',ikHost:'Kompyuter',ikOs:'OS',ikLast:'Oxirgi faollik',
+    ikSt:'Holat',ikPlat:'Platforma',ikAd:'Reklama bloki',ikSlp:'Sleep',
+    platOk:'Ruxsat etilgan',adOk:'Bloklangan',slpVal:'5 daqiqa',
+    alertTxt:"Ba'zi monitorlar offline!",
+    logIn:'Saidikrom tizimga kirdi',logOut:'Saidikrom chiqdi',
+    wkAdapter:'Tarmoq adapteri',wkServer:'Server manzili',wkAgents:'Ulangan agentlar',wkStatus:'Tarmoq holati',
+    wvStatus:'Faol',wlDevices:'Ulangan monitorlar',
+    chHours:'Ish soatlari',tcStart:'Boshlanish',tcEnd:'Tugash',
+    chSleep:'Sleep sozlamalari',
+    skIdle:'Harakatsizlik',skWake:"Uyg'onish",skOff:"To'liq o'chirish",skOffV:'Man etilgan',
+    skEn:'Energiya',skCont:'Uzluksizlik',skContV:"Ta'minlangan",
+    chStats:'Bugungi statistika',pbOn:'Faol',pbSleep:'Sleep',pbOff:'Offline',
+    logBarLbl:'AUDIT LOG — REAL VAQT',btnClr:'Tozalash',btnExp:'↓ Export',btnLogout:'↩ Chiqish',
+    ssHint:'Screenshot olish uchun tugmani bosing',
+    toastSent:'Buyruq yuborildi',toastAll:'Barcha monitorlarga buyruq',
+    addMonId:'Monitor ID',addMonRoom:'Xona',addMonBtn:'Qo\'shish',removeMon:'O\'chirish',
+    monitorAdded:'Monitor qo\'shildi',monitorRemoved:'Monitor o\'chirildi',
+    monitorNotFound:'Monitor topilmadi',
+    invalidMonitor:'Monitor ID kiriting',selectMonitor:'Avval monitor tanlang',monitorExists:'Monitor allaqachon mavjud',
+    tbCrumb:'MCS v3.0',
+    legOn:'Faol',legSleep:'Sleep',legOff:'Offline',
+  },
+  ru:{
+    userLbl:'Пользователь',passLbl:'Пароль',loginBtn:'ВОЙТИ',
+    loginErr:'Неверный логин или пароль',connecting:'Подключение...',
+    nsMain:'Управление',nsSys:'Система',
+    navDash:'Дашборд',navMon:'Мониторы',navWifi:'WiFi Сеть',
+    navSched:'Расписание',navLogs:'Логи',navInst:'Установка',
+    wsOn:'Подключён',wsOff:'Офлайн',
+    phDash:'Дашборд',pdDash:'Общий обзор',
+    phMon:'Мониторы',pdMon:'Управление в реальном времени',
+    phWifi:'WiFi Сеть',pdWifi:'Устройства в сети',
+    phSched:'Расписание работы',phLogs:'Системные логи',phInst:'Установка агента',
+    slTotal:'Всего подключено',sfTotal:'агент',
+    slOn:'Активных',sfOn:'включены',slSleep:'Спящих',sfSleep:'ожидание',slOff:'Офлайн',sfOff:'не подключены',
+    chActivity:'Активность за 24 часа',chDist:'Распределение',chQuick:'Быстрое управление',
+    gridLbl:'Все мониторы',
+    fAll:'Все',fOn:'Активные',fSleep:'Сон',fOff:'Офлайн',
+    stOn:'Активен',stSleep:'Сон',stOff:'Выключен',stDisc:'Офлайн',
+    ikRoom:'Комната',ikHost:'Компьютер',ikOs:'ОС',ikLast:'Последняя активность',
+    ikSt:'Состояние',ikPlat:'Платформа',ikAd:'Блок рекламы',ikSlp:'Сон',
+    platOk:'Разрешённая',adOk:'Заблокирована',slpVal:'5 минут',
+    alertTxt:'Некоторые мониторы офлайн!',
+    logIn:'Saidikrom вошёл в систему',logOut:'Saidikrom вышел',
+    wkAdapter:'Сетевой адаптер',wkServer:'Адрес сервера',wkAgents:'Подключено агентов',wkStatus:'Статус сети',
+    wvStatus:'Активна',wlDevices:'Подключённые мониторы',
+    chHours:'Часы работы',tcStart:'Начало',tcEnd:'Конец',
+    chSleep:'Настройки сна',
+    skIdle:'Бездействие',skWake:'Пробуждение',skOff:'Полное выключение',skOffV:'Запрещено',
+    skEn:'Энергия',skCont:'Непрерывность',skContV:'Обеспечена',
+    chStats:'Статистика за сегодня',pbOn:'Активные',pbSleep:'Сон',pbOff:'Офлайн',
+    logBarLbl:'ЖУРНАЛ АУДИТА — РЕАЛЬНОЕ ВРЕМЯ',btnClr:'Очистить',btnExp:'↓ Экспорт',btnLogout:'↩ Выйти',
+    ssHint:'Нажмите кнопку Screenshot',
+    toastSent:'Команда отправлена',toastAll:'Команда отправлена всем',
+    addMonId:'ID монитора',addMonRoom:'Комната',addMonBtn:'Добавить',removeMon:'Удалить',
+    monitorAdded:'Монитор добавлен',monitorRemoved:'Монитор удалён',
+    monitorNotFound:'Монитор не найден',
+    invalidMonitor:'Введите ID монитора',selectMonitor:'Сначала выберите монитор',monitorExists:'Монитор уже существует',
+    tbCrumb:'MCS v3.0',
+    legOn:'Активных',legSleep:'Спящих',legOff:'Офлайн',
+  }
+};
+function t(k){return(T[lang]||T.uz)[k]||k}
+
+// ══════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════
+function pad(n){return String(n).padStart(2,'0')}
+function tnow(){const n=new Date();return pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds())}
+
+let _toast;
+function showToast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className=type==='ok'?'':type;el.style.display='block';
+  clearTimeout(_toast);
+  _toast=setTimeout(()=>{el.style.display='none'},2800);
+}
+
+// ══════════════════════════════════════
+// LANG
+// ══════════════════════════════════════
+function setLang(l,btn){
+  lang=l;
+  document.querySelectorAll('.lang-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyLoginLang();
+}
+function setLangApp(l,btn){
+  lang=l;
+  document.querySelectorAll('.tlang').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyAppLang();
+  renderGrid();renderLogs();renderWifi();renderDonut();
+}
+
+function applyLoginLang(){
+  document.getElementById('ll-user').textContent=t('userLbl');
+  document.getElementById('ll-pass').textContent=t('passLbl');
+  document.getElementById('ll-btn').textContent=t('loginBtn');
+}
+
+const APP_LANG_MAP={
+  'ns-main':'nsMain','ns-sys':'nsSys',
+  'nav-dash':'navDash','nav-mon':'navMon','nav-wifi':'navWifi',
+  'nav-sched':'navSched','nav-logs':'navLogs','nav-inst':'navInst',
+  'ph-dash':'phDash','pd-dash':'pdDash',
+  'ph-mon':'phMon','pd-mon':'pdMon',
+  'ph-wifi':'phWifi','pd-wifi':'pdWifi',
+  'ph-sched':'phSched','ph-logs':'phLogs','ph-inst':'phInst',
+  'sl-total':'slTotal','sf-total':'sfTotal',
+  'sl-on':'slOn','sf-on':'sfOn','sl-sleep':'slSleep','sf-sleep':'sfSleep','sl-off':'slOff','sf-off':'sfOff',
+  'ch-activity':'chActivity','ch-dist':'chDist','ch-quick':'chQuick',
+  'grid-lbl':'gridLbl',
+  'f-all':'fAll','f-on':'fOn','f-sleep':'fSleep','f-off':'fOff',
+  'ik-room':'ikRoom','ik-host':'ikHost','ik-os':'ikOs','ik-last':'ikLast',
+  'ik-st':'ikSt','ik-plat':'ikPlat','ik-ad':'ikAd','ik-slp':'ikSlp',
+  'd-plat':'platOk','d-ad':'adOk','d-slp':'slpVal',
+  'alert-txt':'alertTxt',
+  'wk-adapter':'wkAdapter','wk-server':'wkServer','wk-agents':'wkAgents','wk-status':'wkStatus',
+  'wv-status':'wvStatus','wl-devices':'wlDevices',
+  'ch-hours':'chHours','tc-start':'tcStart','tc-end':'tcEnd',
+  'ch-sleep':'chSleep',
+  'sk-idle':'skIdle','sk-wake':'skWake','sk-off':'skOff','sk-off-v':'skOffV',
+  'sk-en':'skEn','sk-cont':'skCont','sk-cont-v':'skContV',
+  'ch-stats':'chStats','pb-on':'pbOn','pb-sleep':'pbSleep','pb-off':'pbOff',
+  'log-bar-lbl':'logBarLbl','btn-clr':'btnClr','btn-exp':'btnExp','btn-logout':'btnLogout',
+  'tb-crumb':'tbCrumb','ws-txt':'wsOff',
+};
+
+function applyAppLang(){
+  Object.entries(APP_LANG_MAP).forEach(([id,key])=>{
+    const el=document.getElementById(id);
+    if(el)el.textContent=t(key);
+  });
+  const wsBadge=document.getElementById('ws-badge');
+  document.getElementById('ws-txt').textContent=wsBadge.classList.contains('on')?t('wsOn'):t('wsOff');
+}
+
+// ══════════════════════════════════════
+// THEME TOGGLE (Ko'z qulayligi)
+// ══════════════════════════════════════
+let darkMode=true;
+function toggleTheme(){
+  darkMode=!darkMode;
+  document.body.classList.toggle('light',!darkMode);
+  document.querySelector('.theme-toggle').textContent=darkMode?'☀':'🌙';
+}
+
+// ══════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════
+function doLogin(){
+  const u=document.getElementById('li-user').value.trim();
+  const p=document.getElementById('li-pass').value;
+  const err=document.getElementById('lerr');
+  const info=document.getElementById('linfo');
+  err.style.display='none';
+  info.style.background='';
+  info.style.color='';
+  if(u!=='admin'||p!=='admin123'){
+    err.textContent=t('loginErr');
+    err.style.display='block';
+    err.style.animation='none';
+    requestAnimationFrame(()=>err.style.animation='scaleIn .2s ease');
+    return;
+  }
+  if(ws && (ws.readyState===WebSocket.OPEN || ws.readyState===WebSocket.CONNECTING)) return;
+
+  manualDisconnect=false;
+  clearTimeout(reconnectTimer);
+  info.textContent=t('connecting');
+  info.style.display='block';
+  connectWS();
+}
+
+function connectWS(){
+  const protocol=location.protocol==='https:'?'wss':'ws';
+  const serverHost=location.host||`${location.hostname}:3000`;
+  try{
+    ws=new WebSocket(`${protocol}://${serverHost}`);
+    ws.onopen=()=>{
+      ws.send(JSON.stringify({type:'admin_hello'}));
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('linfo').style.display='none';
+      setWs(true);
+      applyAppLang();
+      tick();
+      if(!clockTimer) clockTimer=setInterval(tick,1000);
+      buildActivity();
+      addLog('info',t('logIn'));
+    };
+    ws.onmessage=e=>onMsg(JSON.parse(e.data));
+    ws.onclose=()=>{
+      setWs(false);
+      ws=null;
+      if(manualDisconnect) return;
+      addLog('err','Serverga ulanish uzildi — qayta urinmoqda...');
+      clearTimeout(reconnectTimer);
+      reconnectTimer=setTimeout(connectWS,5000);
+    };
+    ws.onerror=()=>{
+      const info=document.getElementById('linfo');
+      if(info){info.textContent='Server topilmadi!';info.style.background='var(--red-dim)';info.style.color='var(--red)'}
+    };
+  }catch(e){console.error(e)}
+}
+
+// ══════════════════════════════════════
+// WS MESSAGES
+// ══════════════════════════════════════
+function onMsg(msg){
+  if(msg.type==='init'){
+    agents={};
+    logs=Array.isArray(msg.logs)?[...msg.logs]:[];
+    (msg.agents||[]).forEach(a=>{agents[a.monitorId]=a});
+    if(msg.network)networkInfo=msg.network;
+    renderGrid();updateCounters();renderLogs();renderWifi();
+  }
+  else if(msg.type==='agent_connected'){
+    agents[msg.monitorId]={monitorId:msg.monitorId,status:msg.status||'on',info:msg.info||{},lastSeen:tnow()};
+    addLog('ok',`Monitor ${msg.monitorId} (${msg.info?.room||'?'}) — ulandi`);
+    renderGrid();updateCounters();
+  }
+  else if(msg.type==='agent_disconnected'){
+    if(agents[msg.monitorId])agents[msg.monitorId].status='offline';
+    addLog('err',`Monitor ${msg.monitorId} — uzildi`);
+    renderGrid();updateCounters();
+  }
+  else if(msg.type==='status_update'){
+    if(agents[msg.monitorId]){agents[msg.monitorId].status=msg.status;agents[msg.monitorId].lastSeen=tnow()}
+    addLog('ok',`Monitor ${msg.monitorId} → ${msg.status}`);
+    renderGrid();updateCounters();
+    if(selId===msg.monitorId)renderDetail(msg.monitorId);
+  }
+  else if(msg.type==='screenshot'){
+    addLog('info',`Monitor ${msg.monitorId} — screenshot`);
+    if(selId===msg.monitorId){
+      document.getElementById('ss-wrap').innerHTML=`<img src="data:image/jpeg;base64,${msg.image}" alt="ss">`;
+    }
+  }
+  else if(msg.type==='monitor_added'){
+    agents[msg.monitor.monitorId]=msg.monitor;
+    addLog('info',`Monitor qo'shildi: ${msg.monitor.monitorId}`);
+    renderGrid();updateCounters();
+  }
+  else if(msg.type==='monitor_removed'){
+    if(!msg.wasActive){
+      if(agents[msg.monitorId]) delete agents[msg.monitorId];
+      if(selId===msg.monitorId){ selId=null; document.getElementById('detail-drawer').style.display='none'; }
+    }
+    addLog('warn',`Monitor o'chirildi: ${msg.monitorId}`);
+    renderGrid();updateCounters();
+  }
+  else if(msg.type==='cmd_ack'){
+    addLog('ok',`Buyruq tasdiqlandi → Monitor ${msg.monitorId}: ${msg.command}`);
+  }
+  else if(msg.type==='log'){
+    logs.push(msg.entry);
+    if(logs.length>500)logs.shift();
+    renderLogs();
+  }
+  else if(msg.type==='wifi_info'){
+    networkInfo=msg.network||[];
+    renderWifi();
+  }
+}
+
+function setWs(ok){
+  const b=document.getElementById('ws-badge');
+  const t2=document.getElementById('ws-txt');
+  b.className='ws-badge '+(ok?'on':'off');
+  t2.textContent=ok?t('wsOn'):t('wsOff');
+}
+
+// ══════════════════════════════════════
+// GRID
+// ══════════════════════════════════════
+function renderGrid(){
+  const grid=document.getElementById('mon-grid');
+  const list=Object.values(agents);
+  if(!list.length){
+    grid.innerHTML=`<div style="grid-column:span 5;padding:2rem;text-align:center;color:var(--text3);font-family:var(--f-mono);font-size:12px">Agentlar ulanishini kutmoqda...</div>`;
+    return;
+  }
+  const shown=filt==='all'?list:list.filter(a=>a.status===filt);
+  grid.innerHTML=shown.map((a,i)=>{
+    const s=a.status||'offline';
+    const pip=s==='on'?'pip-on':s==='sleep'?'pip-sleep':s==='off'?'pip-off':'pip-disc';
+    const tsc='ts-'+(s==='offline'?'disc':s);
+    const stLbl=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+    const offCls=s==='offline'?' offline':'';
+    const selCls=selId===a.monitorId?' sel':'';
+    return `<div class="mon-tile${offCls}${selCls}" onclick="pickMon('${a.monitorId}')"
+      style="animation:fadeUp ${.1+i*.03}s var(--ease-out) both">
+      <div class="tile-top">
+        <span class="tile-id">M${pad(a.monitorId)}</span>
+        <div class="status-pip ${pip}"></div>
+      </div>
+      <div class="tile-room">${a.info?.room||'—'}</div>
+      <div class="tile-st ${tsc}">${stLbl}</div>
+    </div>`;
+  }).join('');
+}
+
+function doFilt(f,btn){
+  filt=f;
+  document.querySelectorAll('.filt').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGrid();
+}
+
+// ══════════════════════════════════════
+// DETAIL
+// ══════════════════════════════════════
+function pickMon(id){
+  selId=id;
+  renderGrid();
+  renderDetail(id);
+  const dr=document.getElementById('detail-drawer');
+  dr.style.display='block';
+  dr.style.animation='none';
+  requestAnimationFrame(()=>dr.style.animation='scaleIn .25s var(--ease-spring)');
+  document.getElementById('ss-wrap').innerHTML=`<div class="ss-hint">${t('ssHint')}</div>`;
+}
+
+function renderDetail(id){
+  const a=agents[id];if(!a)return;
+  const s=a.status||'offline';
+  document.getElementById('d-title').textContent=`Monitor ${pad(id)} — ${a.info?.room||'—'}`;
+  document.getElementById('d-sub').textContent=`${a.info?.hostname||'—'} · ${a.info?.os||'—'}`;
+  document.getElementById('d-room').textContent=a.info?.room||'—';
+  document.getElementById('d-host').textContent=a.info?.hostname||'—';
+  document.getElementById('d-os').textContent=a.info?.os||'—';
+  document.getElementById('d-last').textContent=a.lastSeen||'—';
+  document.getElementById('d-st').textContent=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+  document.getElementById('d-plat').textContent=t('platOk');
+  document.getElementById('d-ad').textContent=t('adOk');
+  document.getElementById('d-slp').textContent=t('slpVal');
+  const pill=document.getElementById('d-pill');
+  const plbl=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+  pill.textContent=plbl;
+  pill.className='st-pill pill-'+(s==='offline'?'disc':s);
+}
+
+// ══════════════════════════════════════
+// COMMANDS
+// ══════════════════════════════════════
+function doCmd(cmd){
+  if(!selId){showToast('Avval monitor tanlang','warn');return}
+  if(!ws||ws.readyState!==1){showToast("Server bilan aloqa yo'q",'err');return}
+  ws.send(JSON.stringify({type:'command',monitorId:selId,command:cmd}));
+  showToast(`${t('toastSent')}: ${cmd}`);
+  addLog('ok',`← Monitor ${selId}: ${cmd}`);
+}
+
+function sendAll(cmd){
+  if(!ws||ws.readyState!==1){showToast("Server bilan aloqa yo'q",'err');return}
+  ws.send(JSON.stringify({type:'command',monitorId:'all',command:cmd}));
+  showToast(t('toastAll'),'ok');
+  addLog('warn',`Ommaviy: ${cmd}`);
+}
+
+function addMonitor(){
+  const id=document.getElementById('new-monitor-id').value.trim();
+  const room=document.getElementById('new-monitor-room').value.trim();
+  if(!id){showToast(t('invalidMonitor'),'warn');return}
+  fetch('/api/monitors',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monitorId:id,room})})
+    .then(async r=>{
+      const data=await r.json();
+      if(!r.ok) throw new Error(data.error||t('monitorExists'));
+      agents[id]=agents[id] && agents[id].status !== 'offline' ? { ...agents[id], ...data.monitor } : data.monitor;
+      renderGrid();updateCounters();
+      document.getElementById('new-monitor-id').value='';
+      document.getElementById('new-monitor-room').value='';
+      showToast(t('monitorAdded'),'ok');
+    })
+    .catch(err=>showToast(err.message||t('monitorExists'),'err'));
+}
+
+function removeMonitor(id){
+  if(!id){showToast(t('selectMonitor'),'warn');return}
+  if(!confirm(`${t('removeMon')} ${id}?`)) return;
+  fetch(`/api/monitors/${encodeURIComponent(id)}`,{method:'DELETE'})
+    .then(async r=>{
+      const data=await r.json();
+      if(!r.ok) throw new Error(data.error||t('monitorNotFound'));
+      if(agents[id]) delete agents[id];
+      if(selId===id){ selId=null; document.getElementById('detail-drawer').style.display='none'; }
+      renderGrid();updateCounters();
+      showToast(t('monitorRemoved'),'ok');
+    })
+    .catch(err=>showToast(err.message||t('monitorNotFound'),'err'));
+}
+
+// ══════════════════════════════════════
+// COUNTERS + CHART
+// ══════════════════════════════════════
+function updateCounters(){
+  const list=Object.values(agents);
+  const total=list.length,on=list.filter(a=>a.status==='on').length;
+  const sl=list.filter(a=>a.status==='sleep').length;
+  const off=list.filter(a=>a.status==='offline'||a.status==='off').length;
+  ['total','on','sleep','off'].forEach(k=>{
+    const el=document.getElementById('cnt-'+k);
+    if(el)el.textContent=[total,on,sl,off][['total','on','sleep','off'].indexOf(k)];
+  });
+  const p=(v,tot)=>tot?Math.round(v/tot*100):0;
+  const op=p(on,total),sp=p(sl,total),fp=p(off,total);
+  ['on','sleep','off'].forEach((k,i)=>{
+    const pct=[op,sp,fp][i];
+    const pel=document.getElementById('pct-'+k);
+    const bel=document.getElementById('bar-'+k);
+    if(pel)pel.textContent=pct+'%';
+    if(bel)bel.style.width=pct+'%';
+  });
+  const nb=document.getElementById('nb-off');
+  if(nb){nb.style.display=off>0?'inline':'none';nb.textContent=off}
+  const ab=document.getElementById('alert-bar');
+  if(ab)ab.style.display=off>0?'flex':'none';
+  const at=document.getElementById('alert-txt');
+  if(at&&off>0)at.textContent=`${off} ta monitor offline!`;
+  renderDonut(on,sl,off,total);
+  appendStatusHistory(on);
+  buildActivity();
+  document.getElementById('mon-total').textContent=total;
+  document.getElementById('mon-configured').textContent=Object.keys(agents).length;
+  document.getElementById('mon-offline').textContent=off;
+  const agentes=document.getElementById('wv-agents');
+  if(agentes) agentes.textContent=total;
+  const wave=document.getElementById('wv-status');
+  if(wave) wave.textContent=total>0?'Faol':'Offline';
+  updateWifiDevices();
+}
+
+function renderDonut(on=0,sl=0,off=0,total=0){
+  if(!total){on=0;sl=0;off=0;total=1}
+  const circ=2*Math.PI*38;
+  const onPct=on/total,slPct=sl/total;
+  const onDash=onPct*circ;
+  const slDash=slPct*circ;
+  const dOn=document.getElementById('donut-on');
+  const dSl=document.getElementById('donut-sleep');
+  if(dOn)dOn.setAttribute('stroke-dasharray',`${onDash} ${circ-onDash}`);
+  if(dSl){
+    dSl.setAttribute('stroke-dasharray',`${slDash} ${circ-slDash}`);
+    const offset=-(onPct*circ);
+    dSl.setAttribute('stroke-dashoffset',offset);
+    dSl.style.transform=`rotate(${-90+onPct*360}deg)`;
+    dSl.style.transformOrigin='50px 50px';
+  }
+  const lo=document.getElementById('leg-on');
+  const ls=document.getElementById('leg-sleep');
+  const lf=document.getElementById('leg-off');
+  if(lo)lo.textContent=`${t('legOn')}: ${on}`;
+  if(ls)ls.textContent=`${t('legSleep')}: ${sl}`;
+  if(lf)lf.textContent=`${t('legOff')}: ${off}`;
+}
+
+// ══════════════════════════════════════
+// ACTIVITY CHART
+// ══════════════════════════════════════
+function buildActivity(){
+  const wrap=document.getElementById('activity-bars');
+  if(!wrap)return;
+  const h=new Date().getHours();
+  wrap.innerHTML=statusHistory.map((v,i)=>{
+    const active = i<=h ? 'active' : '';
+    const label = `${pad(i)}:00 — ${v} ta on`;
+    const height = Math.max(10, Math.min(100, v*3));
+    return `
+      <div class="ab-col ${active}" style="height:${height}%">
+        <div class="ab-tooltip">${label}</div>
+      </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════
+// WIFI
+// ══════════════════════════════════════
+function doWifiScan(){
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'wifi_scan'}));
+  showToast('Tarmoq skanlanmoqda...');
+  renderWifi();
+}
+
+function renderWifi(){
+  // show network adapters
+  const list=networkInfo;
+  const adapter=list.length?list[0].name:'—';
+  const addr=list.length?list[0].address:'—';
+  const el_a=document.getElementById('wv-adapter');
+  const el_s=document.getElementById('wv-server');
+  const el_agents=document.getElementById('wv-agents');
+  const el_status=document.getElementById('wv-status');
+  if(el_a)el_a.textContent=adapter;
+  if(el_s)el_s.textContent=addr?`${addr}:3000`:'—';
+  const listAgents=Object.values(agents);
+  const total=listAgents.length;
+  const online=listAgents.filter(a=>a.status==='on').length;
+  const offline=listAgents.filter(a=>a.status==='offline'||a.status==='off').length;
+  if(el_agents) el_agents.textContent=total;
+  if(el_status) el_status.textContent = total===0 ? 'Offline' : `${online} online / ${offline} off`;
+  updateWifiDevices();
+}
+
+function updateWifiDevices(){
+  const grid=document.getElementById('device-grid');
+  if(!grid)return;
+  const list=Object.values(agents);
+  if(!list.length){
+    grid.innerHTML=`<div style="color:var(--text3);font-family:var(--f-mono);font-size:12px;padding:1rem">Hech qanday qurilma topilmadi</div>`;
+    return;
+  }
+  grid.innerHTML=list.map((a,i)=>{
+    const online=a.status!=='offline';
+    return `<div class="device-card ${online?'agent-linked':''}" style="animation:fadeUp ${.08+i*.04}s ease both">
+      <div class="dc-top">
+        <div class="dc-icon">${online?'🖥':'⬜'}</div>
+        <div>
+          <div class="dc-name">${a.info?.room||`Monitor ${a.monitorId}`}</div>
+          <div class="dc-type">Windows · ${a.info?.hostname||'—'}</div>
+        </div>
+        <div class="dc-status ${online?'online':'offline'}">${online?'Online':'Offline'}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2)">
+        <span>M${pad(a.monitorId)}</span>
+        <span style="font-family:var(--f-mono);color:var(--text3)">${a.lastSeen||'—'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════
+// LOGS
+// ══════════════════════════════════════
+function addLog(type,msg){
+  const entry={ts:tnow(),type,msg};
+  logs.push(entry);
+  if(logs.length>500)logs.shift();
+  renderLogs();
+}
+
+function renderLogs(){
+  const box=document.getElementById('log-box');if(!box)return;
+  box.innerHTML=logs.slice(-200).reverse().map(l=>
+    `<div class="log-line l-${l.type}"><span class="l-time">[${l.ts||l.t||'?'}]</span><span class="l-msg">${l.msg}</span></div>`
+  ).join('');
+}
+
+function clearLogs(){logs=[];renderLogs()}
+function exportLogs(){
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(logs.map(l=>`[${l.ts||l.t}][${l.type.toUpperCase()}] ${l.msg}`).join('\n'));
+  a.download='mcs_audit.txt';a.click();
+}
+
+// ══════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════
+const pageNames={dashboard:'phDash',monitors:'phMon',wifi:'phWifi',schedule:'phSched',logs:'phLogs',install:'phInst'};
+
+function gotoView(name,el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const view=document.getElementById('view-'+name);
+  view.classList.add('active');
+  view.style.animation='none';
+  requestAnimationFrame(()=>view.style.animation='fadeUp .3s var(--ease-out)');
+  el.classList.add('active');
+  const tb=document.getElementById('tb-page');
+  if(tb)tb.textContent=t(pageNames[name]||'phDash');
+  if(name==='wifi'){renderWifi();updateWifiDevices()}
+}
+
+// ══════════════════════════════════════
+// CLOCK + TICKER
+// ══════════════════════════════════════
+function tick(){
+  const n=new Date();
+  const h=n.getHours(),m=n.getMinutes(),s=n.getSeconds();
+  const cl=document.getElementById('sb-clock');
+  if(cl)cl.textContent=pad(h)+':'+pad(m)+':'+pad(s);
+  const inW=h>=7&&h<17;
+  const lb=document.getElementById('sb-clbl');
+  if(lb){lb.textContent=inW?t('workLbl')||'Ish vaqti':t('offLbl')||'Ish vaqti tugagan';lb.className='clock-lbl '+(inW?'work':'owork')}
+  const pct=(h*60+m)/(24*60)*100;
+  const tln=document.getElementById('tl-now');
+  if(tln)tln.style.left=pct.toFixed(1)+'%';
+}
+
+// ══════════════════════════════════════
+// LOGOUT
+// ══════════════════════════════════════
+function doLogout(){
+  addLog('warn',t('logOut'));
+  manualDisconnect=true;
+  clearTimeout(reconnectTimer);
+  if(ws)ws.close();
+  ws=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('linfo').style.display='none';
+  document.getElementById('lerr').style.display='none';
+  agents={};logs=[];networkInfo=[];selId=null;
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+applyLoginLang();
+</script>
+</body>
+</html>

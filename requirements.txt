@@ -1,0 +1,6 @@
+websockets
+comtypes
+pycaw
+mss
+pillow
+python-docx
