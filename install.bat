@@ -30,10 +30,10 @@ set /p MONITOR_ID="Monitor raqamini kiriting (masalan: 01): "
 set /p ROOM_NAME="Xona nomini kiriting (masalan: Xona 101): "
 set /p SERVER_IP="Server IP manzilini kiriting (masalan: 192.168.1.100): "
 
-:: agent.py ni yangilash
-powershell -Command "(Get-Content agent.py) -replace 'MONITOR_ID  = \"01\"', 'MONITOR_ID  = \"%MONITOR_ID%\"' | Set-Content agent.py"
-powershell -Command "(Get-Content agent.py) -replace 'ROOM_NAME   = \"Xona 101\"', 'ROOM_NAME   = \"%ROOM_NAME%\"' | Set-Content agent.py"
-powershell -Command "(Get-Content agent.py) -replace 'SERVER_IP   = \"192.168.1.100\"', 'SERVER_IP   = \"%SERVER_IP%\"' | Set-Content agent.py"
+:: Environment variables o'rnatish
+setx MCS_MONITOR_ID "%MONITOR_ID%" /M
+setx MCS_ROOM_NAME "%ROOM_NAME%" /M
+setx MCS_SERVER_IP "%SERVER_IP%" /M
 
 echo [OK] Sozlamalar saqlandi
 echo.
@@ -48,6 +48,10 @@ echo pythonw agent.py >> "%STARTUP_DIR%\monitor_agent.bat"
 echo [OK] Startup ga qo'shildi
 echo.
 echo ================================================
+echo    O'rnatish tugadi!
+echo    Kompyuterni qayta ishga tushiring.
+echo ================================================
+pause
 echo    O'rnatish tugadi!
 echo    Agent hozir ishga tushmoqda...
 echo ================================================

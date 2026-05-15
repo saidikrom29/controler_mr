@@ -71,13 +71,28 @@ Agar Docker o‘rnatilgan bo‘lsa, serverni konteynerda ishlatish uchun quyidag
    http://localhost:3000
    ```
 
-Agar `docker-compose` ishlatishni istasangiz:
+Agar `docker compose` ishlatishni istasangiz:
 ```bat
 cd /d "C:\Users\Admin\Documents\controler_mr"
 docker compose up -d
 ```
 
 > Docker konteyner ichidagi server IP `localhost:3000` bo‘ladi, lekin boshqa tarmoqdan ulanish uchun `http://<kompyuter_IP>:3000` ni ishlating.
+
+## Brauzerda ishlash uchun muhim
+- Brauzerda `index.html` faylini bevosita `file://` orqali ochmang.
+- Avvalo serverni ishga tushiring va keyin quyidagi manzilni oching:
+  ```bat
+  http://localhost:3000
+  ```
+- Agar server boshqa kompyuterda bo‘lsa, brauzerga shu IP kiritilsin:
+  ```bat
+  http://192.168.1.100:3000
+  ```
+- Login ekranda yangi maydon paydo bo‘ladi: `Server IP:Port`. Bu yerga server manzilingizni yozing, masalan:
+  ```bat
+  10.77.50.126:3000
+  ```
 
 ## Qo‘shimcha
 Agar siz `install.bat` ni ishga tushirsangiz, u avtomatik ravishda `requirements.txt` dan kutubxonalarni o‘rnatadi.

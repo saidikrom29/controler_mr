@@ -19,6 +19,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(frontendDir));
 
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
+
 // ── State ──
 const agents   = new Map();
 const agentData = {};
@@ -26,6 +29,7 @@ const configuredMonitors = new Map();
 const admins   = new Set();
 const auditLog = [];
 const wifiDevices = new Map(); // discovered devices on WiFi
+const validTokens = new Set(); // for session tokens
 
 function ts() { return new Date().toISOString(); }
 
@@ -82,6 +86,39 @@ function getNetworkInfo() {
   return result;
 }
 
+function scanWifiDevices() {
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    exec('arp -a', (error, stdout, stderr) => {
+      const devices = [];
+      if (!error && stdout) {
+        const lines = stdout.split('\n');
+        lines.forEach(line => {
+          // Parse ARP table output (Windows format: IP address - MAC address)
+          const match = line.match(/(\d+\.\d+\.\d+\.\d+)\s+([0-9a-f-]+)\s+(\w+)/i);
+          if (match) {
+            const [_, ip, mac, type] = match;
+            if (type !== 'static' && mac !== 'ff-ff-ff-ff-ff-ff') {
+              devices.push({
+                ip,
+                mac: mac.toUpperCase(),
+                type: type || 'dynamic',
+                hostname: '—', // Could be resolved later
+                lastSeen: ts()
+              });
+            }
+          }
+        });
+      }
+      // Update wifiDevices map
+      devices.forEach(dev => {
+        wifiDevices.set(dev.ip, dev);
+      });
+      resolve(devices);
+    });
+  });
+}
+
 // ── WebSocket handler ──
 wss.on('connection', (ws, req) => {
   ws.mcsConnectedAt = ts();
@@ -124,6 +161,10 @@ wss.on('connection', (ws, req) => {
 
     // ── ADMIN hello ──
     else if (msg.type === 'admin_hello') {
+      if (!msg.token || !validTokens.has(msg.token)) {
+        ws.close();
+        return;
+      }
       ws.mcsRole = 'admin';
       admins.add(ws);
 
@@ -180,8 +221,14 @@ wss.on('connection', (ws, req) => {
 
     // ── WIFI scan request ──
     else if (msg.type === 'wifi_scan') {
-      const net = getNetworkInfo();
-      broadcastAdmins({ type: 'wifi_info', network: net, devices: Array.from(wifiDevices.values()) });
+      scanWifiDevices().then(devices => {
+        const net = getNetworkInfo();
+        broadcastAdmins({ type: 'wifi_info', network: net, devices });
+      }).catch(err => {
+        console.error('WiFi scan error:', err);
+        const net = getNetworkInfo();
+        broadcastAdmins({ type: 'wifi_info', network: net, devices: [] });
+      });
     }
   });
 
@@ -248,6 +295,17 @@ app.get('/api/network', (req, res) => {
   res.json(getNetworkInfo());
 });
 
+app.post('/login', (req, res) => {
+  const { user, pass } = req.body;
+  if (user === ADMIN_USER && pass === ADMIN_PASS) {
+    const token = 'admin_token_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    validTokens.add(token);
+    res.json({ success: true, token });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+});
+
 app.get('/api/monitors', (req, res) => {
   res.json(getAgentSnapshot());
 });
@@ -305,9 +363,6 @@ server.listen(PORT, HOST, () => {
   console.log('\n╔══════════════════════════════════════════╗');
   console.log('║   MCS v3 — Server ishga tushdi           ║');
   console.log(`║   Port    : ${PORT}`.padEnd(42) + '║');
-  console.log('║   Tarmoq manzillari:                   ║');
-  formatNetworkAddresses().split('\n').forEach(addr => {
-    console.log(`║   ${addr}`.padEnd(42) + '║');
-  });
+  console.log('║   Status  : Faol'.padEnd(42) + '║');
   console.log('╚══════════════════════════════════════════╝\n');
 });
