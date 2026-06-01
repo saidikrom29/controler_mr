@@ -181,6 +181,7 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
     linear-gradient(90deg,rgba(0,217,126,.025) 1px,transparent 1px);
   background-size:48px 48px;
   animation:fadeIn 1.2s ease;
+  pointer-events:none;
 }
 
 .login-glow{
@@ -236,6 +237,7 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
   mask-composite:exclude;
   -webkit-mask-composite:xor;
   animation:shimmer 2s linear infinite;
+  pointer-events:none;
 }
 
 .brand-mark{
@@ -285,7 +287,7 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
 .field-hidden{display:none}
 
 .login-card{
-  position:relative;z-index:1;width:400px;
+  position:relative;z-index:2;width:400px;
   background:linear-gradient(180deg,rgba(12,16,24,.98),rgba(8,11,16,.94));
   border:1px solid rgba(255,255,255,.08);
   border-radius:var(--rl);
@@ -1079,7 +1081,7 @@ body.light .terminal,.body.light .ps-box,.body.light .install-arch{background:#1
     </div>
     <div class="field">
       <label class="field-lbl" id="ll-pass">Parol</label>
-      <input class="field-input" id="li-pass" type="password" placeholder="••••••••"
+      <input class="field-input" id="li-pass" type="password" placeholder="••••••••" autofocus
              onkeydown="if(event.key==='Enter')doLogin()">
     </div>
 
@@ -1776,6 +1778,8 @@ function initLoginGate(){
   } else {
     serverHost = `${location.hostname}:3000`;
   }
+  const passField = document.getElementById('li-pass');
+  if (passField) passField.focus();
   if (token) {
     const info=document.getElementById('linfo');
     info.textContent = 'Avtomatik kirilmoqda...';
