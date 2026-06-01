@@ -150,7 +150,7 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 10000;
+  z-index: 10001;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -218,7 +218,7 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
 }
 
 .login-card{
-  position:relative;z-index:1;width:400px;
+  position:relative;z-index:10002;width:400px;
   background:var(--surface);
   border:1px solid var(--border2);
   border-radius:var(--rl);
@@ -1768,6 +1768,14 @@ function initLoginGate(){
   }, { passive:false });
 
   const token = localStorage.getItem('authToken');
+  const serverField=document.getElementById('li-server');
+  if(serverField && serverField.value.trim()) {
+    serverHost = serverField.value.trim();
+  } else if(location.host) {
+    serverHost = location.host;
+  } else {
+    serverHost = `${location.hostname}:3000`;
+  }
   if (token) {
     const info=document.getElementById('linfo');
     info.textContent = 'Avtomatik kirilmoqda...';
@@ -1781,6 +1789,7 @@ function initLoginGate(){
 document.addEventListener('DOMContentLoaded', initLoginGate);
 
 function doLogin(){
+  const s=document.getElementById('li-server').value.trim();
   const u=document.getElementById('li-user').value.trim();
   const p=document.getElementById('li-pass').value;
   const err=document.getElementById('lerr');
@@ -1792,6 +1801,7 @@ function doLogin(){
   info.style.background='';
   info.style.color='';
 
+  const host = s || serverHost || location.host || `${location.hostname}:3000`;
   if(!u || !p){
     err.textContent='❌ Barcha maydonlarni to\'ldiring';
     err.style.background='var(--red-dim)';
@@ -1807,7 +1817,9 @@ function doLogin(){
   btn.disabled = true;
   btn.innerHTML = '<span class="emoji">⏳</span> KIRISH...';
 
-  fetch('/login', {
+  serverHost = host;
+  const loginUrl = window.location.host ? '/login' : `http://${host}/login`;
+  fetch(loginUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user: u, pass: p })
