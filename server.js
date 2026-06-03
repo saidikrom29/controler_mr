@@ -197,25 +197,15 @@ wss.on('connection', (ws, req) => {
     // ── COMMAND from admin ──
     else if (msg.type === 'command') {
       const { monitorId, command, params } = msg;
+      const sent = dispatchCommand(monitorId, command, params);
       if (monitorId === 'all') {
-        let sent = 0;
-        agents.forEach(a => {
-          if (a.readyState === WebSocket.OPEN) {
-            a.send(JSON.stringify({ type: 'command', command, params: params || {} }));
-            sent++;
-          }
-        });
         addLog('warn', `Ommaviy buyruq [${command}] → ${sent} monitor`);
         broadcastAdmins({ type: 'cmd_ack', monitorId: 'all', command, sent });
+      } else if (sent) {
+        addLog('ok', `Monitor ${monitorId} ← ${command}`);
+        broadcastAdmins({ type: 'cmd_ack', monitorId, command, sent: 1 });
       } else {
-        const agent = agents.get(monitorId);
-        if (agent && agent.readyState === WebSocket.OPEN) {
-          agent.send(JSON.stringify({ type: 'command', command, params: params || {} }));
-          addLog('ok', `Monitor ${monitorId} ← ${command}`);
-          broadcastAdmins({ type: 'cmd_ack', monitorId, command, sent: 1 });
-        } else {
-          addLog('err', `Monitor ${monitorId} offline — ${command} yuborilmadi`);
-        }
+        addLog('err', `Monitor ${monitorId} offline — ${command} yuborilmadi`);
       }
     }
 
@@ -265,23 +255,14 @@ app.post('/api/command', (req, res) => {
   const { monitorId, command, params } = req.body;
   if (!monitorId || !command) return res.status(400).json({ ok: false, error: 'monitorId va command kerak' });
 
+  const sent = dispatchCommand(monitorId, command, params);
   if (monitorId === 'all') {
-    let sent = 0;
-    agents.forEach(a => {
-      if (a.readyState === WebSocket.OPEN) {
-        a.send(JSON.stringify({ type: 'command', command, params: params || {} }));
-        sent++;
-      }
-    });
     addLog('warn', `REST: ommaviy [${command}] → ${sent} monitor`);
     return res.json({ ok: true, sent });
   }
-
-  const agent = agents.get(monitorId);
-  if (!agent || agent.readyState !== WebSocket.OPEN) {
+  if (!sent) {
     return res.status(404).json({ ok: false, error: 'Agent topilmadi yoki offline' });
   }
-  agent.send(JSON.stringify({ type: 'command', command, params: params || {} }));
   addLog('ok', `REST: Monitor ${monitorId} ← ${command}`);
   res.json({ ok: true });
 });
@@ -352,6 +333,26 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// ── Shared command dispatcher ──
+function dispatchCommand(monitorId, command, params) {
+  if (monitorId === 'all') {
+    let sent = 0;
+    agents.forEach(a => {
+      if (a.readyState === WebSocket.OPEN) {
+        a.send(JSON.stringify({ type: 'command', command, params: params || {} }));
+        sent++;
+      }
+    });
+    return sent;
+  }
+  const agent = agents.get(monitorId);
+  if (agent && agent.readyState === WebSocket.OPEN) {
+    agent.send(JSON.stringify({ type: 'command', command, params: params || {} }));
+    return 1;
+  }
+  return 0;
+}
 
 function formatNetworkAddresses() {
   const list = getNetworkInfo();
