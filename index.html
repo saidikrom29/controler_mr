@@ -1828,7 +1828,12 @@ function doLogin(){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user: u, pass: p })
   })
-  .then(res => res.json())
+  .then(res => {
+    if(!res.ok && res.headers.get('content-type')?.includes('application/json')===false){
+      throw new Error(`Server xatosi: ${res.status}`);
+    }
+    return res.json();
+  })
   .then(data => {
     if (data.success) {
       localStorage.setItem('authToken', data.token);
@@ -1872,7 +1877,9 @@ function connectWS(host){
       const token = localStorage.getItem('authToken');
       ws.send(JSON.stringify({type:'admin_hello', token}));
     };
-    ws.onmessage=e=>onMsg(JSON.parse(e.data));
+    ws.onmessage=e=>{
+      try{onMsg(JSON.parse(e.data))}catch(err){console.error('[WS_MSG] Xabar qayta ishlashda xato:',err)}
+    };
     ws.onclose=()=>{
       setWs(false);
       ws=null;
@@ -1885,7 +1892,10 @@ function connectWS(host){
       const info=document.getElementById('linfo');
       if(info){info.textContent=t('serverNotFound');info.style.background='var(--red-dim)';info.style.color='var(--red)'}
     };
-  }catch(e){console.error(e)}
+  }catch(e){
+    console.error('[WS] WebSocket ulanishida xato:',e);
+    addLog('err','WebSocket ulanishida xato: '+e.message);
+  }
 }
 
 // ══════════════════════════════════════

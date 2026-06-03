@@ -42,11 +42,17 @@ function addLog(type, msg) {
   return entry;
 }
 
+function safeSend(ws, data) {
+  try {
+    if (ws.readyState === WebSocket.OPEN) ws.send(data);
+  } catch (err) {
+    console.error(`[SEND_ERR] Failed to send to ${ws.mcsRole || 'unknown'} (${ws.mcsId || '?'}):`, err.message);
+  }
+}
+
 function broadcastAdmins(payload) {
   const data = JSON.stringify(payload);
-  admins.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(data);
-  });
+  admins.forEach(ws => safeSend(ws, data));
 }
 
 function getAgentSnapshot() {
@@ -90,6 +96,12 @@ function scanWifiDevices() {
   return new Promise((resolve) => {
     const { exec } = require('child_process');
     exec('arp -a', (error, stdout, stderr) => {
+      if (error) {
+        console.error('[WIFI_SCAN] arp command failed:', error.message);
+      }
+      if (stderr) {
+        console.error('[WIFI_SCAN] arp stderr:', stderr);
+      }
       const devices = [];
       if (!error && stdout) {
         const lines = stdout.split('\n');
@@ -125,7 +137,12 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', raw => {
     let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+    try {
+      msg = JSON.parse(raw);
+    } catch (err) {
+      console.error(`[WS_PARSE] Malformed message from ${ws.mcsRole || 'unknown'} (${ws.mcsId || '?'}):`, err.message);
+      return;
+    }
 
     // ── AGENT hello ──
     if (msg.type === 'agent_hello') {
@@ -168,7 +185,7 @@ wss.on('connection', (ws, req) => {
       ws.mcsRole = 'admin';
       admins.add(ws);
 
-      ws.send(JSON.stringify({ type: 'init', agents: getAgentSnapshot(), logs: auditLog.slice(-200), network: getNetworkInfo() }));
+      safeSend(ws, JSON.stringify({ type: 'init', agents: getAgentSnapshot(), logs: auditLog.slice(-200), network: getNetworkInfo() }));
       addLog('info', 'Admin tizimga kirdi');
     }
 
@@ -200,17 +217,16 @@ wss.on('connection', (ws, req) => {
       if (monitorId === 'all') {
         let sent = 0;
         agents.forEach(a => {
-          if (a.readyState === WebSocket.OPEN) {
-            a.send(JSON.stringify({ type: 'command', command, params: params || {} }));
-            sent++;
-          }
+          const cmdData = JSON.stringify({ type: 'command', command, params: params || {} });
+          safeSend(a, cmdData);
+          if (a.readyState === WebSocket.OPEN) sent++;
         });
         addLog('warn', `Ommaviy buyruq [${command}] → ${sent} monitor`);
         broadcastAdmins({ type: 'cmd_ack', monitorId: 'all', command, sent });
       } else {
         const agent = agents.get(monitorId);
         if (agent && agent.readyState === WebSocket.OPEN) {
-          agent.send(JSON.stringify({ type: 'command', command, params: params || {} }));
+          safeSend(agent, JSON.stringify({ type: 'command', command, params: params || {} }));
           addLog('ok', `Monitor ${monitorId} ← ${command}`);
           broadcastAdmins({ type: 'cmd_ack', monitorId, command, sent: 1 });
         } else {
@@ -247,7 +263,12 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  ws.on('error', err => console.error('WS error:', err.message));
+  ws.on('error', err => {
+    const role = ws.mcsRole || 'unknown';
+    const id = ws.mcsId || '?';
+    console.error(`[WS_ERR] ${role} (${id}):`, err.message);
+    addLog('err', `WebSocket xato (${role} ${id}): ${err.message}`);
+  });
 });
 
 // ── REST API ──
@@ -268,10 +289,9 @@ app.post('/api/command', (req, res) => {
   if (monitorId === 'all') {
     let sent = 0;
     agents.forEach(a => {
-      if (a.readyState === WebSocket.OPEN) {
-        a.send(JSON.stringify({ type: 'command', command, params: params || {} }));
-        sent++;
-      }
+      const cmdData = JSON.stringify({ type: 'command', command, params: params || {} });
+      safeSend(a, cmdData);
+      if (a.readyState === WebSocket.OPEN) sent++;
     });
     addLog('warn', `REST: ommaviy [${command}] → ${sent} monitor`);
     return res.json({ ok: true, sent });
@@ -281,7 +301,7 @@ app.post('/api/command', (req, res) => {
   if (!agent || agent.readyState !== WebSocket.OPEN) {
     return res.status(404).json({ ok: false, error: 'Agent topilmadi yoki offline' });
   }
-  agent.send(JSON.stringify({ type: 'command', command, params: params || {} }));
+  safeSend(agent, JSON.stringify({ type: 'command', command, params: params || {} }));
   addLog('ok', `REST: Monitor ${monitorId} ← ${command}`);
   res.json({ ok: true });
 });
@@ -342,7 +362,7 @@ app.get('/', (req, res) => {
 setInterval(() => {
   agents.forEach((ws, id) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'command', command: 'ping' }));
+      safeSend(ws, JSON.stringify({ type: 'command', command: 'ping' }));
     } else {
       agents.delete(id);
       broadcastAdmins({ type: 'agent_disconnected', monitorId: id });
@@ -359,10 +379,37 @@ function formatNetworkAddresses() {
   return list.map(net => `http://${net.address}:${PORT}`).join('\n  ');
 }
 
+// ── Global error handlers ──
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+  addLog('err', `Server xatosi: ${err.message}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+  addLog('err', `Unhandled rejection: ${reason}`);
+});
+
+// ── Express error-handling middleware ──
+app.use((err, req, res, _next) => {
+  console.error('[EXPRESS_ERR]', err.message);
+  addLog('err', `Server xatosi: ${err.message}`);
+  res.status(500).json({ ok: false, error: 'Ichki server xatosi' });
+});
+
 server.listen(PORT, HOST, () => {
   console.log('\n╔══════════════════════════════════════════╗');
   console.log('║   MCS v3 — Server ishga tushdi           ║');
   console.log(`║   Port    : ${PORT}`.padEnd(42) + '║');
   console.log('║   Status  : Faol'.padEnd(42) + '║');
   console.log('╚══════════════════════════════════════════╝\n');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[FATAL] Port ${PORT} band — boshqa jarayon ishlatyapti`);
+  } else {
+    console.error('[FATAL] Server xatosi:', err.message);
+  }
+  process.exit(1);
 });
