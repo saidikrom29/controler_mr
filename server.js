@@ -3,24 +3,46 @@
  * Node.js + Express + WebSocket
  * Saidikrom Admin Panel
  */
-const express   = require('express');
-const http      = require('http');
-const WebSocket = require('ws');
-const cors      = require('cors');
-const path      = require('path');
-const os        = require('os');
+const express     = require('express');
+const http        = require('http');
+const WebSocket   = require('ws');
+const cors        = require('cors');
+const path        = require('path');
+const os          = require('os');
+const crypto      = require('crypto');
+const helmet      = require('helmet');
+const rateLimit   = require('express-rate-limit');
 
 const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
 const frontendDir = __dirname;
 
-app.use(cors());
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [];
+
+app.use(cors({
+  origin: ALLOWED_ORIGINS.length > 0
+    ? (origin, cb) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) cb(null, true);
+        else cb(new Error('CORS origin not allowed'));
+      }
+    : true,
+}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.static(frontendDir));
 
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASS = process.env.ADMIN_PASS;
+
+if (!ADMIN_USER || !ADMIN_PASS) {
+  console.error('FATAL: ADMIN_USER and ADMIN_PASS environment variables are required.');
+  console.error('Set them before starting the server, e.g.:');
+  console.error('  ADMIN_USER=admin ADMIN_PASS=<strong-password> node server.js');
+  process.exit(1);
+}
 
 // ── State ──
 const agents   = new Map();
@@ -29,7 +51,8 @@ const configuredMonitors = new Map();
 const admins   = new Set();
 const auditLog = [];
 const wifiDevices = new Map(); // discovered devices on WiFi
-const validTokens = new Set(); // for session tokens
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const validTokens = new Map(); // token -> { createdAt }
 
 function ts() { return new Date().toISOString(); }
 
@@ -161,7 +184,8 @@ wss.on('connection', (ws, req) => {
 
     // ── ADMIN hello ──
     else if (msg.type === 'admin_hello') {
-      if (!msg.token || !validTokens.has(msg.token)) {
+      if (!msg.token || !validTokens.has(msg.token) ||
+          (Date.now() - validTokens.get(msg.token).createdAt > TOKEN_TTL_MS)) {
         ws.close();
         return;
       }
@@ -250,8 +274,32 @@ wss.on('connection', (ws, req) => {
   ws.on('error', err => console.error('WS error:', err.message));
 });
 
+// ── Auth middleware ──
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
+  if (!token || !validTokens.has(token)) {
+    return res.status(401).json({ ok: false, error: 'Authentication required' });
+  }
+  const entry = validTokens.get(token);
+  if (Date.now() - entry.createdAt > TOKEN_TTL_MS) {
+    validTokens.delete(token);
+    return res.status(401).json({ ok: false, error: 'Token expired' });
+  }
+  next();
+}
+
+// ── Login rate limiter ──
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, error: 'Too many login attempts. Try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // ── REST API ──
-app.get('/api/status', (req, res) => {
+app.get('/api/status', requireAuth, (req, res) => {
   res.json({
     ok: true,
     agents: getAgentSnapshot(),
@@ -261,7 +309,7 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-app.post('/api/command', (req, res) => {
+app.post('/api/command', requireAuth, (req, res) => {
   const { monitorId, command, params } = req.body;
   if (!monitorId || !command) return res.status(400).json({ ok: false, error: 'monitorId va command kerak' });
 
@@ -286,31 +334,31 @@ app.post('/api/command', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/logs', (req, res) => {
+app.get('/api/logs', requireAuth, (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   res.json(auditLog.slice(-limit));
 });
 
-app.get('/api/network', (req, res) => {
+app.get('/api/network', requireAuth, (req, res) => {
   res.json(getNetworkInfo());
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', loginLimiter, (req, res) => {
   const { user, pass } = req.body;
   if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    const token = 'admin_token_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    validTokens.add(token);
+    const token = crypto.randomBytes(32).toString('hex');
+    validTokens.set(token, { createdAt: Date.now() });
     res.json({ success: true, token });
   } else {
     res.status(401).json({ success: false, error: 'Invalid credentials' });
   }
 });
 
-app.get('/api/monitors', (req, res) => {
+app.get('/api/monitors', requireAuth, (req, res) => {
   res.json(getAgentSnapshot());
 });
 
-app.post('/api/monitors', (req, res) => {
+app.post('/api/monitors', requireAuth, (req, res) => {
   const { monitorId, room } = req.body;
   if (!monitorId) return res.status(400).json({ ok: false, error: 'monitorId kerak' });
   if (configuredMonitors.has(monitorId)) return res.status(409).json({ ok: false, error: 'Monitor allaqachon mavjud' });
@@ -322,7 +370,7 @@ app.post('/api/monitors', (req, res) => {
   res.json({ ok: true, monitor });
 });
 
-app.delete('/api/monitors/:monitorId', (req, res) => {
+app.delete('/api/monitors/:monitorId', requireAuth, (req, res) => {
   const { monitorId } = req.params;
   if (!configuredMonitors.has(monitorId)) return res.status(404).json({ ok: false, error: 'Monitor topilmadi' });
 
