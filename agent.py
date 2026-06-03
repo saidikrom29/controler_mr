@@ -20,7 +20,11 @@ from datetime import datetime
 # SOZLAMALAR — .env yoki muhit o'zgaruvchilari orqali ham berish mumkin
 # =============================================
 SERVER_IP   = os.getenv("MCS_SERVER_IP", "127.0.0.1")   # Server kompyuter IP si
-SERVER_PORT = int(os.getenv("MCS_SERVER_PORT", "3000"))
+try:
+    SERVER_PORT = int(os.getenv("MCS_SERVER_PORT", "3000"))
+except ValueError:
+    print(f"[XATO] MCS_SERVER_PORT noto'g'ri qiymat: {os.getenv('MCS_SERVER_PORT')!r}, 3000 ishlatiladi")
+    SERVER_PORT = 3000
 MONITOR_ID  = os.getenv("MCS_MONITOR_ID", "01")         # Har bir kompyuterda boshqa raqam: "01", "02" ...
 ROOM_NAME   = os.getenv("MCS_ROOM_NAME", "Xona 101")    # Xona nomi
 # =============================================
@@ -54,40 +58,89 @@ def get_system_info():
 def turn_off_monitor():
     """Monitorni o'chirish (sleep rejim)"""
     if platform.system() == "Windows":
-        # Monitor o'chirish
-        ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
+        try:
+            ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitor o'chirish xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: monitor boshqaruvi faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitor o'chirildi")
 
 def turn_on_monitor():
     """Monitorni yoqish"""
     if platform.system() == "Windows":
-        ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, -1)
+        try:
+            ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, -1)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitor yoqish xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: monitor boshqaruvi faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitor yoqildi")
 
 def sleep_monitor():
     """Sleep rejim"""
     if platform.system() == "Windows":
-        subprocess.run(["powercfg", "/change", "monitor-timeout-ac", "1"], 
-                      capture_output=True)
-        ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
+        try:
+            result = subprocess.run(["powercfg", "/change", "monitor-timeout-ac", "1"],
+                                   capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] powercfg xatosi: {result.stderr.strip()}")
+            ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Sleep rejim xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: sleep rejim faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Sleep rejimga o'tildi")
 
 def restart_pc():
     """Kompyuterni qayta ishga tushirish"""
     if platform.system() == "Windows":
-        subprocess.run(["shutdown", "/r", "/t", "5"])
+        try:
+            result = subprocess.run(["shutdown", "/r", "/t", "5"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Restart xatosi: {result.stderr.strip()}")
+                return
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Restart xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: restart faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Qayta ishga tushirilmoqda...")
 
 def shutdown_pc():
     """Kompyuterni o'chirish"""
     if platform.system() == "Windows":
-        subprocess.run(["shutdown", "/s", "/t", "5"])
+        try:
+            result = subprocess.run(["shutdown", "/s", "/t", "5"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Shutdown xatosi: {result.stderr.strip()}")
+                return
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Shutdown xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: shutdown faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] O'chirilmoqda...")
 
 def lock_pc():
     """Kompyuterni bloklash"""
     if platform.system() == "Windows":
-        ctypes.windll.user32.LockWorkStation()
+        try:
+            ctypes.windll.user32.LockWorkStation()
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Bloklash xatosi: {e}")
+            return
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: bloklash faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Bloklandi")
 
 def set_volume(level):
@@ -132,7 +185,13 @@ def block_apps():
     blocked = ["chrome.exe", "firefox.exe", "telegram.exe", "discord.exe"]
     if platform.system() == "Windows":
         for app in blocked:
-            subprocess.run(["taskkill", "/f", "/im", app], capture_output=True)
+            try:
+                subprocess.run(["taskkill", "/f", "/im", app], capture_output=True, text=True)
+            except Exception as e:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] {app} o'chirish xatosi: {e}")
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Ogohlantirish: bloklash faqat Windows'da ishlaydi")
+        return
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Dasturlar bloklandi")
 
 async def send_status(ws, status, data=None):
@@ -157,35 +216,38 @@ async def handle_command(ws, msg):
     params  = msg.get("params", {})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Buyruq: {command}")
 
-    if command == "monitor_off":
-        turn_off_monitor()
-        await send_status(ws, "off")
-    elif command == "monitor_on":
-        turn_on_monitor()
-        await send_status(ws, "on")
-    elif command == "sleep":
-        sleep_monitor()
-        await send_status(ws, "sleep")
-    elif command == "restart":
-        await send_status(ws, "restarting")
-        restart_pc()
-    elif command == "shutdown":
-        await send_status(ws, "off")
-        shutdown_pc()
-    elif command == "lock":
-        lock_pc()
-        await send_status(ws, "locked")
-    elif command == "screenshot":
-        await send_screenshot(ws)
-    elif command == "set_volume":
-        set_volume(params.get("level", 50))
-    elif command == "block_apps":
-        block_apps()
-        await send_status(ws, "on")
-    elif command == "ping":
-        await send_status(ws, "on", {"pong": True, "time": datetime.now().isoformat()})
-    else:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Noma'lum buyruq: {command}")
+    try:
+        if command == "monitor_off":
+            turn_off_monitor()
+            await send_status(ws, "off")
+        elif command == "monitor_on":
+            turn_on_monitor()
+            await send_status(ws, "on")
+        elif command == "sleep":
+            sleep_monitor()
+            await send_status(ws, "sleep")
+        elif command == "restart":
+            await send_status(ws, "restarting")
+            restart_pc()
+        elif command == "shutdown":
+            await send_status(ws, "off")
+            shutdown_pc()
+        elif command == "lock":
+            lock_pc()
+            await send_status(ws, "locked")
+        elif command == "screenshot":
+            await send_screenshot(ws)
+        elif command == "set_volume":
+            set_volume(params.get("level", 50))
+        elif command == "block_apps":
+            block_apps()
+            await send_status(ws, "on")
+        elif command == "ping":
+            await send_status(ws, "on", {"pong": True, "time": datetime.now().isoformat()})
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Noma'lum buyruq: {command}")
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Buyruq bajarishda xato ({command}): {e}")
 
 async def connect():
     info = get_system_info()
@@ -211,13 +273,20 @@ async def connect():
                 async def periodic_screenshot():
                     while True:
                         await asyncio.sleep(30)
-                        await send_screenshot(ws)
+                        try:
+                            await send_screenshot(ws)
+                        except Exception as e:
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] Avtomatik screenshot xatosi: {e}")
 
                 screenshot_task = asyncio.create_task(periodic_screenshot())
 
                 # Buyruqlarni kutish
                 async for message in ws:
-                    msg = json.loads(message)
+                    try:
+                        msg = json.loads(message)
+                    except json.JSONDecodeError as e:
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] Noto'g'ri JSON xabar: {e}")
+                        continue
                     if msg.get("type") == "command":
                         await handle_command(ws, msg)
                 screenshot_task.cancel()

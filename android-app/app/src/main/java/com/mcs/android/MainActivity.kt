@@ -1,10 +1,15 @@
 package com.mcs.android
 
 import android.annotation.SuppressLint
+
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -22,7 +27,25 @@ class MainActivity : AppCompatActivity() {
         val webView = findViewById<WebView>(R.id.webview)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                val url = request?.url?.toString() ?: "unknown"
+                val desc = error?.description?.toString() ?: "unknown error"
+                Log.e("MCS", "WebView error loading $url: $desc")
+                if (request?.isForMainFrame == true) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Server bilan bog'lanib bo'lmadi: $desc",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
         webView.webChromeClient = WebChromeClient()
 
         webView.loadUrl(SERVER_URL)
