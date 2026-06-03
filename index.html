@@ -218,16 +218,6 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
   color:var(--green);
 }
 
-.login-card{
-  position:relative;z-index:10002;width:400px;
-  background:var(--surface);
-  border:1px solid var(--border2);
-  border-radius:var(--rl);
-  padding:2.25rem 2rem 2rem;
-  animation:fadeUp .5s var(--ease-out);
-  box-shadow:0 8px 32px rgba(0,0,0,.12);
-}
-
 .login-card::before{
   content:'';position:absolute;inset:0;
   border-radius:var(--rl);
@@ -309,39 +299,6 @@ body::after{content:'';position:fixed;inset:0;opacity:.025;background-image:url(
   padding-bottom:1.25rem;
   border-bottom:1px solid rgba(255,255,255,.08);
 }
-
-.login-btn{
-  width:100%;margin-top:.25rem;
-  background:linear-gradient(135deg,#1dfc8c,#00b97c);
-  color:#061000;
-  border:none;border-radius:var(--r);
-  font-family:var(--f-head);font-size:13px;font-weight:700;
-  letter-spacing:.1em;padding:13px;
-  cursor:pointer;text-transform:uppercase;
-  transition:transform .15s var(--ease-spring),opacity .2s,box-shadow .2s,background .2s;
-  position:relative;overflow:hidden;
-}
-.login-btn::before{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(135deg,rgba(255,255,255,.12),transparent);
-  opacity:0;transition:opacity .2s;
-}
-.login-btn::after{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(circle,rgba(255,255,255,.3),transparent);
-  opacity:0;transition:opacity .3s;
-}
-.login-btn:hover{
-  opacity:.98;
-  box-shadow:0 10px 30px rgba(0,217,126,.24);
-  transform:translateY(-1px);
-}
-.login-btn:hover::before{opacity:1}
-.login-btn:active{
-  transform:scale(.96);
-  animation:buttonClick .2s ease;
-}
-.login-btn:active::after{opacity:1}
 
 .login-btn span.emoji{display:inline-block;transform:translateY(0);transition:transform .2s ease;}
 .login-btn:hover span.emoji{transform:translateY(-2px) scale(1.1);}
@@ -1660,6 +1617,34 @@ function t(k){return(T[lang]||T.uz)[k]||k}
 function pad(n){return String(n).padStart(2,'0')}
 function tnow(){const n=new Date();return pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds())}
 
+function statusLabel(s){
+  return s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+}
+
+function resolveHost(...fallbacks){
+  for(const v of fallbacks){if(v)return v}
+  return location.host||`${location.hostname}:3000`;
+}
+
+function showFormMsg(el,msg,type){
+  el.textContent=msg;
+  el.style.background=type==='ok'?'var(--green-dim)':'var(--red-dim)';
+  el.style.color=type==='ok'?'var(--green)':'var(--red)';
+  el.style.display='block';
+  if(type!=='ok'){el.style.animation='none';requestAnimationFrame(()=>el.style.animation='scaleIn .2s ease')}
+}
+
+function getAgentCounts(){
+  const list=Object.values(agents);
+  const total=list.length;
+  const on=list.filter(a=>a.status==='on').length;
+  const sleep=list.filter(a=>a.status==='sleep').length;
+  const off=list.filter(a=>a.status==='offline'||a.status==='off').length;
+  return {list,total,on,sleep,off};
+}
+
+function refreshUI(){renderGrid();updateCounters()}
+
 let _toast;
 function showToast(msg,type='ok'){
   const el=document.getElementById('toast');
@@ -1805,15 +1790,10 @@ function doLogin(){
   info.style.background='';
   info.style.color='';
 
-  const host = s || serverHost || location.host || `${location.hostname}:3000`;
+  const host = resolveHost(s, serverHost);
   if(!u || !p){
-    err.textContent='❌ Barcha maydonlarni to\'ldiring';
-    err.style.background='var(--red-dim)';
-    err.style.color='var(--red)';
-    err.style.display='block';
-    err.style.animation='none';
+    showFormMsg(err,'❌ Barcha maydonlarni to\'ldiring','err');
     passField.classList.add('shake');
-    requestAnimationFrame(()=>err.style.animation='scaleIn .2s ease');
     setTimeout(()=>passField.classList.remove('shake'),300);
     return;
   }
@@ -1832,29 +1812,18 @@ function doLogin(){
   .then(data => {
     if (data.success) {
       localStorage.setItem('authToken', data.token);
-      info.textContent = 'Xush kelibsiz!';
-      info.style.background='var(--green-dim)';
-      info.style.color='var(--green)';
-      info.style.display='block';
+      showFormMsg(info,'Xush kelibsiz!','ok');
       setTimeout(() => {
         connectWS();
       }, 1000);
     } else {
-      err.textContent='❌ Login yoki parol noto\'g\'ri';
-      err.style.background='var(--red-dim)';
-      err.style.color='var(--red)';
-      err.style.display='block';
-      err.style.animation='none';
+      showFormMsg(err,'❌ Login yoki parol noto\'g\'ri','err');
       passField.classList.add('shake');
-      requestAnimationFrame(()=>err.style.animation='scaleIn .2s ease');
       setTimeout(()=>passField.classList.remove('shake'),300);
     }
   })
   .catch(e => {
-    err.textContent='❌ Server bilan bog\'lanib bo\'lmadi';
-    err.style.background='var(--red-dim)';
-    err.style.color='var(--red)';
-    err.style.display='block';
+    showFormMsg(err,'❌ Server bilan bog\'lanib bo\'lmadi','err');
   })
   .finally(() => {
     btn.disabled = false;
@@ -1864,7 +1833,7 @@ function doLogin(){
 
 function connectWS(host){
   const protocol=location.protocol==='https:'?'wss':'ws';
-  serverHost = host || serverHost || location.host || `${location.hostname}:3000`;
+  serverHost = resolveHost(host, serverHost);
   const targetHost = serverHost;
   try{
     ws=new WebSocket(`${protocol}://${targetHost}`);
@@ -1897,7 +1866,7 @@ function onMsg(msg){
     logs=Array.isArray(msg.logs)?[...msg.logs]:[];
     (msg.agents||[]).forEach(a=>{agents[a.monitorId]=a});
     if(msg.network)networkInfo=msg.network;
-    renderGrid();updateCounters();renderLogs();renderWifi();
+    refreshUI();renderLogs();renderWifi();
 
     // Unlock the page
     unlockPage();
@@ -1913,17 +1882,17 @@ function onMsg(msg){
   else if(msg.type==='agent_connected'){
     agents[msg.monitorId]={monitorId:msg.monitorId,status:msg.status||'on',info:msg.info||{},lastSeen:tnow()};
     addLog('ok',`Monitor ${msg.monitorId} (${msg.info?.room||'?'}) — ulandi`);
-    renderGrid();updateCounters();
+    refreshUI();
   }
   else if(msg.type==='agent_disconnected'){
     if(agents[msg.monitorId])agents[msg.monitorId].status='offline';
     addLog('err',`Monitor ${msg.monitorId} — uzildi`);
-    renderGrid();updateCounters();
+    refreshUI();
   }
   else if(msg.type==='status_update'){
     if(agents[msg.monitorId]){agents[msg.monitorId].status=msg.status;agents[msg.monitorId].lastSeen=tnow()}
     addLog('ok',`Monitor ${msg.monitorId} → ${msg.status}`);
-    renderGrid();updateCounters();
+    refreshUI();
     if(selId===msg.monitorId)renderDetail(msg.monitorId);
   }
   else if(msg.type==='screenshot'){
@@ -1935,7 +1904,7 @@ function onMsg(msg){
   else if(msg.type==='monitor_added'){
     agents[msg.monitor.monitorId]=msg.monitor;
     addLog('info',`Monitor qo'shildi: ${msg.monitor.monitorId}`);
-    renderGrid();updateCounters();
+    refreshUI();
   }
   else if(msg.type==='monitor_removed'){
     if(!msg.wasActive){
@@ -1943,7 +1912,7 @@ function onMsg(msg){
       if(selId===msg.monitorId){ selId=null; document.getElementById('detail-drawer').style.display='none'; }
     }
     addLog('warn',`Monitor o'chirildi: ${msg.monitorId}`);
-    renderGrid();updateCounters();
+    refreshUI();
   }
   else if(msg.type==='cmd_ack'){
     addLog('ok',`Buyruq tasdiqlandi → Monitor ${msg.monitorId}: ${msg.command}`);
@@ -1982,7 +1951,7 @@ function renderGrid(){
     const s=a.status||'offline';
     const pip=s==='on'?'pip-on':s==='sleep'?'pip-sleep':s==='off'?'pip-off':'pip-disc';
     const tsc='ts-'+(s==='offline'?'disc':s);
-    const stLbl=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+    const stLbl=statusLabel(s);
     const offCls=s==='offline'?' offline':'';
     const selCls=selId===a.monitorId?' sel':'';
     return `<div class="mon-tile${offCls}${selCls}" onclick="pickMon('${a.monitorId}')"
@@ -2027,12 +1996,12 @@ function renderDetail(id){
   document.getElementById('d-host').textContent=a.info?.hostname||'—';
   document.getElementById('d-os').textContent=a.info?.os||'—';
   document.getElementById('d-last').textContent=a.lastSeen||'—';
-  document.getElementById('d-st').textContent=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+  document.getElementById('d-st').textContent=statusLabel(s);
   document.getElementById('d-plat').textContent=t('platOk');
   document.getElementById('d-ad').textContent=t('adOk');
   document.getElementById('d-slp').textContent=t('slpVal');
   const pill=document.getElementById('d-pill');
-  const plbl=s==='on'?t('stOn'):s==='sleep'?t('stSleep'):s==='off'?t('stOff'):t('stDisc');
+  const plbl=statusLabel(s);
   pill.textContent=plbl;
   pill.className='st-pill pill-'+(s==='offline'?'disc':s);
 }
@@ -2064,7 +2033,7 @@ function addMonitor(){
       const data=await r.json();
       if(!r.ok) throw new Error(data.error||t('monitorExists'));
       agents[id]=agents[id] && agents[id].status !== 'offline' ? { ...agents[id], ...data.monitor } : data.monitor;
-      renderGrid();updateCounters();
+      refreshUI();
       document.getElementById('new-monitor-id').value='';
       document.getElementById('new-monitor-room').value='';
       showToast(t('monitorAdded'),'ok');
@@ -2081,7 +2050,7 @@ function removeMonitor(id){
       if(!r.ok) throw new Error(data.error||t('monitorNotFound'));
       if(agents[id]) delete agents[id];
       if(selId===id){ selId=null; document.getElementById('detail-drawer').style.display='none'; }
-      renderGrid();updateCounters();
+      refreshUI();
       showToast(t('monitorRemoved'),'ok');
     })
     .catch(err=>showToast(err.message||t('monitorNotFound'),'err'));
@@ -2091,10 +2060,7 @@ function removeMonitor(id){
 // COUNTERS + CHART
 // ══════════════════════════════════════
 function updateCounters(){
-  const list=Object.values(agents);
-  const total=list.length,on=list.filter(a=>a.status==='on').length;
-  const sl=list.filter(a=>a.status==='sleep').length;
-  const off=list.filter(a=>a.status==='offline'||a.status==='off').length;
+  const {list,total,on,sleep:sl,off}=getAgentCounts();
   ['total','on','sleep','off'].forEach(k=>{
     const el=document.getElementById('cnt-'+k);
     if(el)el.textContent=[total,on,sl,off][['total','on','sleep','off'].indexOf(k)];
@@ -2189,10 +2155,7 @@ function renderWifi(){
   const el_status=document.getElementById('wv-status');
   if(el_a)el_a.textContent=adapter;
   if(el_s)el_s.textContent=addr?`${addr}:3000`:'—';
-  const listAgents=Object.values(agents);
-  const total=listAgents.length;
-  const online=listAgents.filter(a=>a.status==='on').length;
-  const offline=listAgents.filter(a=>a.status==='offline'||a.status==='off').length;
+  const {total,on:online,off:offline}=getAgentCounts();
   if(el_agents) el_agents.textContent=total;
   if(el_status) el_status.textContent = total===0 ? 'Offline' : `${online} online / ${offline} off`;
   updateWifiDevices();
